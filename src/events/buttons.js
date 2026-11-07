@@ -8,7 +8,7 @@ import {
   TextInputStyle,
 } from 'discord.js';
 import { config } from '../config.js';
-import { store } from '../storage.js';
+import { store } from '../db.js';
 import { bypassUrl, ApiError, cacheGet, cacheSet } from '../api.js';
 import { truncate } from '../util.js';
 import {

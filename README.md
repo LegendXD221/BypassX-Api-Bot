@@ -7,6 +7,7 @@
 ![Node](https://img.shields.io/badge/node-18.17%2B-339933?logo=nodedotjs&logoColor=white)
 ![discord.js](https://img.shields.io/badge/discord.js-14-5865F2?logo=discord&logoColor=white)
 ![Components](https://img.shields.io/badge/Components%20V2-native-57F287)
+![Postgres](https://img.shields.io/badge/Neon%20Postgres-free%20tier-00E599?logo=neon&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
 </div>
@@ -15,7 +16,8 @@
 
 ## ✨ Features
 
-- ⚡ **One-command bypass** for 45+ gated-link services (Linkvertise, LootLabs, Delta, Rekonise, …)
+- ⚡ **One-command bypass** for 48+ gated-link services (Linkvertise, LootLabs, Delta, Rekonise, …)
+- 🖱️ **Bypass Link** — right-click any message → Apps → the first supported link gets bypassed
 - 🧩 **Components V2 native** — clean accent cards, never a wall of embeds
 - 📱 **Mobile Copy · 💻 PC Copy · 🔗 Open Result** buttons on every result
   (mobile replies plain text for long-press, PC replies a code block with one-click copy,
@@ -24,9 +26,15 @@
   a rerun usually picks up where the previous attempt stopped
 - 🙌 **Guided OAuth handoff** — when Delta demands a one-time sign-in, the bot renders the
   sign-in button and a modal to paste the redirect URL, then resumes the chain automatically
-- 📡 **Auto-bypass mode** — arm a channel and every supported link posted there gets
-  bypassed automatically
-- 🧠 Result caching, per-user cooldowns, blacklist, persisted lifetime counters
+- 📡 **Auto-bypass, managed by server owners** — arm channels and every supported link
+  posted there gets bypassed automatically (state lives in Postgres, survives restarts)
+- 🧹 **Auto-leave** — the bot automatically leaves servers with fewer than **150 members**
+  (`MIN_GUILD_MEMBERS`, politely DMs the owner first)
+- 🧠 Result caching, per-user cooldowns, user & guild blacklist, bypass audit logs,
+  lifetime counters — all persisted in **Neon Postgres (free tier)**
+- 🛡️ **No-exploit posture** — env-only secrets, server-side permission gates on every
+  privileged command, opaque button tokens instead of raw URLs, strict URL validation,
+  memory-only degradation if the database blips
 - 🛡️ Minimal & professional by design — honest errors, no noisy output
 
 ## 🧭 Commands
@@ -34,20 +42,28 @@
 | Command | Description | Access |
 | --- | --- | --- |
 | `/bypass url` | Bypass a supported gated link | Everyone |
+| **Bypass Link** (message menu) | Right-click a message → Apps → bypass | Everyone |
 | `/services [search]` | Browse all supported services (paginated) | Everyone |
 | `/stats` | Live bot & API statistics | Everyone |
 | `/ping` | Discord + API latency | Everyone |
-| `/help` · `/invite` | Overview & invite | Everyone |
-| `/enable-autobypass [channel]` | Arm auto-bypass in a channel | Bot owner |
-| `/disable-autobypass [channel]` | Disarm a channel | Bot owner |
-| `/autobypass-list` | List armed channels | Bot owner |
+| `/autobypass` | See which channels are armed in this server | Everyone |
+| `/help` · `/invite` · `/support` | Overview, invite, support | Everyone |
+| `/enable-autobypass [channel] [channels]` | Arm auto-bypass in up to 10 channels | Server owner / admins |
+| `/disable-autobypass [channel] [channels] [all]` | Disarm channels — or the whole server | Server owner / admins |
 | `/owner eval` | Run JavaScript in the bot process | Bot owner |
+| `/owner stats` | Deep global statistics + top domains | Bot owner |
+| `/owner logs [scope] [id]` | Recent bypass logs from the database | Bot owner |
+| `/owner maintenance on/off` | Pause the bot for everyone but you | Bot owner |
 | `/owner servers` · `leave` | Guild list · leave a guild | Bot owner |
 | `/owner presence` | Set status / activity | Bot owner |
 | `/owner broadcast` · `dm` | Announce to all guilds · DM a user | Bot owner |
-| `/owner blacklist` | Manage the user blacklist | Bot owner |
+| `/owner blacklist` | Blacklist users **and whole guilds** | Bot owner |
 | `/owner api` · `cache` · `cooldown` | API diagnostics · cache · cooldown overrides | Bot owner |
 | `/owner reboot` | Restart the process | Bot owner |
+
+> Owner access = the Discord user IDs in `OWNER_IDS`. Auto-bypass management =
+> the **server owner** and members with **Administrator** — enforced server-side,
+> and the commands are hidden from non-admins by Discord itself.
 
 ## 🚀 Setup
 
@@ -62,9 +78,11 @@
 
 3. Create your application in the [Discord Developer Portal](https://discord.com/developers/applications),
    name it **BypassX Api**, grab the bot token and application ID,
-   and enable the **Message Content** privileged intent (required for auto-bypass).
-4. `cp .env.example .env` and fill in your values
-5. Start it
+   and enable the **Message Content** privileged intent (required for auto-bypass —
+   without it the bot still runs, auto-bypass is just disabled).
+4. Create a free database at [neon.tech](https://neon.tech) and copy the connection string.
+5. `cp .env.example .env` and fill in your values
+6. Start it
 
    ```bash
    npm start
@@ -82,25 +100,37 @@ application — set `GUILD_ID` for instant registration in your test server).
 | `OWNER_IDS` | – | Comma-separated owner Discord IDs (default: bot author) |
 | `BX_API_URL` | – | Official API base (default: production) |
 | `BX_API_KEY` | ✅* | BypassX API key — *needed for bypasses* |
+| `DATABASE_URL` | – | Neon Postgres connection string — state persistence (memory-only without it) |
+| `MIN_GUILD_MEMBERS` | – | Auto-leave threshold (default `150`, `0` disables) |
+| `SUPPORT_SERVER_URL` | – | Optional invite shown by `/support` |
 | `GUILD_ID` | – | Test guild for instant command registration |
-| `DATA_DIR` | – | Persistence directory (default `data/`) |
 
 ## 📡 Auto-bypass
 
-Arm a channel with `/enable-autobypass` (bot owner only). From then on, any message
-posted there that contains a supported gated link is bypassed automatically:
+Arm a channel with `/enable-autobypass` (server owners & admins). From then on, any
+message posted there that contains a supported gated link is bypassed automatically:
 
 - unsupported links are ignored silently
 - one bypass per channel every 8 seconds (flood-safe)
+- the same link is never auto-bypassed twice within 10 minutes
 - failures react ❌ instead of spamming the channel
 - results render with the same Mobile Copy / PC Copy / Open Result buttons
+- armed channels are stored in Postgres — restarts and re-invites keep your setup
 
 ## 🐳 Docker
 
 ```bash
 docker build -t bypassx-api-bot .
-docker run --env-file .env -v ./data:/app/data bypassx-api-bot
+docker run --env-file .env bypassx-api-bot
 ```
+
+## ☁️ Deploy free on Render
+
+1. Push this repo to GitHub (or fork it).
+2. On [render.com](https://render.com) create a **Web Service** → *Build and deploy from a Git repository* → paste the repo URL (public repos don't need the GitHub connection).
+3. Runtime **Node**, build command `npm install`, start command `npm start`, instance type **Free**.
+4. Add the environment variables from the table above.
+5. Health check path: `/health` — the bot answers there and self-pings to stay awake.
 
 ## 🔍 Verify your install
 

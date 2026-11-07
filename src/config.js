@@ -5,7 +5,7 @@ import 'dotenv/config';
  * secret ever needs to live in the repo. See .env.example.
  */
 export const config = {
-  version: '1.0.0',
+  version: '1.1.0',
 
   // Discord
   token: process.env.DISCORD_TOKEN ?? '',
@@ -20,9 +20,15 @@ export const config = {
   apiUrl: (process.env.BX_API_URL ?? 'https://bypassx-omega.vercel.app').replace(/\/+$/, ''),
   apiKey: process.env.BX_API_KEY ?? '',
 
+  // Persistence (Neon Postgres, free tier)
+  databaseUrl: process.env.DATABASE_URL ?? '',
+
+  // Guild policy
+  minGuildMembers: Math.max(0, Number(process.env.MIN_GUILD_MEMBERS ?? 150)),
+
   // Runtime
-  dataDir: process.env.DATA_DIR ?? 'data',
   repoUrl: 'https://github.com/LegendXD221/BypassX-Api-Bot',
+  supportServerUrl: process.env.SUPPORT_SERVER_URL ?? '',
 
   colors: {
     primary: 0x5865f2,

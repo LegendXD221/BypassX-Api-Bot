@@ -1,5 +1,5 @@
 import { MessageFlags } from 'discord.js';
-import { store } from '../storage.js';
+import { store } from '../db.js';
 import { resumeOauth, ApiError } from '../api.js';
 import { V2, errorContainer, oauthContainer, resultContainer } from '../components.js';
 import { takeToken } from '../tokens.js';

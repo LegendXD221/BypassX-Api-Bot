@@ -13,6 +13,9 @@ import { issueToken } from './tokens.js';
 /** Flag that switches a message over to Components V2. */
 export const V2 = MessageFlags.IsComponentsV2;
 
+/** V2 + ephemeral — the standard combo for private interaction replies. */
+export const wrapV2 = MessageFlags.IsComponentsV2 | MessageFlags.Ephemeral;
+
 function brand(text = null) {
   return `-# BypassX Api • v${config.version}${text ? ` • ${text}` : ''}`;
 }
@@ -252,5 +255,22 @@ export function broadcastContainer({ message, requesterTag }) {
     title: 'Owner Broadcast',
     body: [message],
     footerText: `sent by ${requesterTag}`,
+  });
+}
+
+/* ------------------------------------------------------------------ */
+/* Leave notice (sent to a guild owner before auto-leaving)            */
+/* ------------------------------------------------------------------ */
+
+export function leaveCard(guild) {
+  return card({
+    accent: config.colors.neutral,
+    emoji: '👋',
+    title: 'BypassX Api has left your server',
+    body: [
+      `Thanks for trying **BypassX Api** in **${guild.name}**!`,
+      `To keep things fast and spam-free for everyone, the bot only stays in servers with **${config.minGuildMembers}+ members**.`,
+      'Feel free to invite it back once your server qualifies — settings you made are saved.',
+    ],
   });
 }

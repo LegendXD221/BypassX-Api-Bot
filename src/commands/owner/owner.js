@@ -8,7 +8,7 @@ import {
 import { inspect } from 'node:util';
 import { createRequire } from 'node:module';
 import { config, isOwner } from '../../config.js';
-import { store } from '../../storage.js';
+import { store, dbHealthy } from '../../db.js';
 import {
   refreshSupported,
   supported,
@@ -17,7 +17,7 @@ import {
   cacheStats,
   metrics,
 } from '../../api.js';
-import { truncate, sleep } from '../../util.js';
+import { truncate, sleep, formatUptime } from '../../util.js';
 import { V2, card, errorContainer, broadcastContainer } from '../../components.js';
 import { tokenStats } from '../../tokens.js';
 import * as api from '../../api.js';
@@ -54,6 +54,7 @@ export default {
         .setDescription('Run JavaScript in the bot process')
         .addStringOption((o) => o.setName('code').setDescription('Code to evaluate').setRequired(true))
     )
+    .addSubcommand((sc) => sc.setName('stats').setDescription('Deep global statistics'))
     .addSubcommand((sc) => sc.setName('servers').setDescription('List every guild the bot is in'))
     .addSubcommand((sc) =>
       sc
@@ -105,7 +106,7 @@ export default {
     .addSubcommand((sc) =>
       sc
         .setName('blacklist')
-        .setDescription('Blacklist users from the bot')
+        .setDescription('Blacklist a user or an entire guild')
         .addStringOption((o) =>
           o
             .setName('action')
@@ -117,7 +118,50 @@ export default {
               { name: 'list', value: 'list' }
             )
         )
-        .addUserOption((o) => o.setName('user').setDescription('Target user (for add/remove)'))
+        .addStringOption((o) =>
+          o
+            .setName('target')
+            .setDescription('Target type')
+            .addChoices(
+              { name: 'user', value: 'user' },
+              { name: 'guild', value: 'guild' }
+            )
+        )
+        .addUserOption((o) => o.setName('user').setDescription('Target user (for users)'))
+        .addStringOption((o) => o.setName('id').setDescription('Target ID (for guilds)'))
+        .addStringOption((o) => o.setName('reason').setDescription('Reason').setMaxLength(200))
+    )
+    .addSubcommand((sc) =>
+      sc
+        .setName('logs')
+        .setDescription('Recent bypass logs from the database')
+        .addStringOption((o) =>
+          o
+            .setName('scope')
+            .setDescription('Scope')
+            .addChoices(
+              { name: 'global', value: 'global' },
+              { name: 'user', value: 'user' },
+              { name: 'guild', value: 'guild' }
+            )
+        )
+        .addStringOption((o) => o.setName('id').setDescription('User or guild ID (for user/guild scope)'))
+        .addIntegerOption((o) => o.setName('limit').setDescription('How many (1-20, default 10)').setMinValue(1).setMaxValue(20))
+    )
+    .addSubcommand((sc) =>
+      sc
+        .setName('maintenance')
+        .setDescription('Toggle maintenance mode (pauses the bot for everyone but you)')
+        .addStringOption((o) =>
+          o
+            .setName('mode')
+            .setDescription('On or off')
+            .setRequired(true)
+            .addChoices(
+              { name: 'on', value: 'on' },
+              { name: 'off', value: 'off' }
+            )
+        )
     )
     .addSubcommand((sc) => sc.setName('api').setDescription('Diagnose the BypassX API connection'))
     .addSubcommand((sc) =>
@@ -160,6 +204,8 @@ export default {
     switch (sub) {
       case 'eval':
         return subEval(interaction);
+      case 'stats':
+        return subStats(interaction);
       case 'servers':
         return subServers(interaction);
       case 'leave':
@@ -172,6 +218,10 @@ export default {
         return subDm(interaction);
       case 'blacklist':
         return subBlacklist(interaction);
+      case 'logs':
+        return subLogs(interaction);
+      case 'maintenance':
+        return subMaintenance(interaction);
       case 'api':
         return subApi(interaction);
       case 'cache':
@@ -207,6 +257,33 @@ async function subEval(interaction) {
       content: `❌ **Failed after ${Date.now() - started}ms**\n\`\`\`js\n${truncate(e?.stack ?? String(e), 1800)}\n\`\`\``,
     });
   }
+}
+
+async function subStats(interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await refreshSupported();
+  const db = await store.publicStats();
+  const c = store.counters;
+  const mem = process.memoryUsage();
+
+  const lines = [
+    `**Runtime** — uptime ${formatUptime(process.uptime())} · ${interaction.client.guilds.cache.size} servers · Node ${process.version} · v${config.version}`,
+    `**Bypasses (lifetime)** — ${c.bypasses ?? 0} total · ${c.autoBypasses ?? 0} auto · ${c.failures ?? 0} failed · ${metrics.cacheHits} cache hits this session`,
+    db
+      ? `**Logged (DB)** — ${db.total} total · ${db.last24h} in 24h · ${db.successRate}% success · ${db.users} unique user(s)`
+      : '**Logged (DB)** — database offline, lifetime counters only',
+    `**Auto-bypass** — ${store.totalAutobypassChannels()} channel(s) armed across ${store.autobypassGuildCount()} server(s)`,
+    `**Process** — heap ${(mem.heapUsed / 1048576).toFixed(1)} MB · rss ${(mem.rss / 1048576).toFixed(1)} MB · db ${dbHealthy() ? '✅ connected' : '❌ memory-only'}`,
+  ];
+
+  if (db?.topDomains?.length) {
+    lines.push(`**Top domains (30d)**\n${db.topDomains.map((d) => `> \`${d.domain}\` — ${d.n}`).join('\n')}`);
+  }
+
+  await interaction.editReply({
+    flags: V2 | MessageFlags.Ephemeral,
+    components: [card({ emoji: '📈', title: 'Owner statistics', body: lines })],
+  });
 }
 
 async function subServers(interaction) {
@@ -260,7 +337,7 @@ async function subPresence(interaction) {
       card({
         emoji: '🪄',
         title: 'Presence updated',
-        body: [`**${status}** · ${type} **${name}**`],
+        body: [`**${status}** · ${type} **${name}**`, '-# Resets to rotation on reboot.'],
       }),
     ],
   });
@@ -322,44 +399,117 @@ async function subDm(interaction) {
 
 async function subBlacklist(interaction) {
   const action = interaction.options.getString('action', true);
+  const target = interaction.options.getString('target') ?? 'user';
   const user = interaction.options.getUser('user');
+  const id = interaction.options.getString('id');
+  const reason = interaction.options.getString('reason');
 
   if (action === 'list') {
-    const lines = store.blacklist.length
-      ? store.blacklist.map((id) => `> \`${id}\``).join('\n')
+    const rows = await store.blacklistList();
+    const lines = rows.length
+      ? rows.map((r) => `> \`${r.type}\` \`${r.target_id}\`${r.reason ? ` — ${truncate(r.reason, 80)}` : ''}`).join('\n')
       : '> Blacklist is empty.';
     return interaction.reply({
       flags: V2 | MessageFlags.Ephemeral,
-      components: [card({ emoji: '🚫', title: `Blacklist (${store.blacklist.length})`, body: [lines] })],
+      components: [card({ emoji: '🚫', title: `Blacklist (${rows.length})`, body: [lines] })],
     });
   }
 
-  if (!user) {
+  // Resolve the target ID: user option wins, otherwise the id option.
+  const targetId = target === 'user' ? (user?.id ?? (/\d{17,20}/.test(id ?? '') ? id : null)) : id;
+  if (!targetId) {
     return interaction.reply({
       flags: V2 | MessageFlags.Ephemeral,
-      components: [errorContainer({ title: 'User required', description: `Pick a user for **${action}**.` })],
+      components: [
+        errorContainer({
+          title: 'Target required',
+          description:
+            target === 'user'
+              ? 'Pick a **user** or provide an **id** for the blacklist action.'
+              : 'Provide a **guild id** for the blacklist action.',
+        }),
+      ],
     });
   }
-  if (isOwner(user.id)) {
+  if (target === 'user' && isOwner(targetId)) {
     return interaction.reply({
       flags: V2 | MessageFlags.Ephemeral,
       components: [errorContainer({ title: 'Not allowed', description: 'Owners cannot be blacklisted.' })],
     });
   }
 
-  if (action === 'add') {
-    store.blacklistAdd(user.id);
-  } else {
-    store.blacklistRemove(user.id);
-  }
+  if (action === 'add') store.blacklistAdd(target, targetId, reason, interaction.user.id);
+  else store.blacklistRemove(target, targetId);
 
   await interaction.reply({
     flags: V2 | MessageFlags.Ephemeral,
     components: [
       card({
         emoji: '🚫',
-        title: `Blacklist ${action === 'add' ? '— added' : '— removed'}`,
-        body: [`**${user.tag}** (\`${user.id}\`) · ${store.blacklist.length} user(s) blacklisted now.`],
+        title: `Blacklist — ${action === 'add' ? 'added' : 'removed'}`,
+        body: [`\`${target}\` \`${targetId}\`${reason ? ` — ${reason}` : ''}`, action === 'add' ? 'They can no longer use the bot anywhere.' : 'They can use the bot again.'],
+      }),
+    ],
+  });
+}
+
+async function subLogs(interaction) {
+  const scope = interaction.options.getString('scope') ?? 'global';
+  const id = interaction.options.getString('id');
+  const limit = interaction.options.getInteger('limit') ?? 10;
+
+  if (scope !== 'global' && !/\d{17,20}/.test(id ?? '')) {
+    return interaction.reply({
+      flags: V2 | MessageFlags.Ephemeral,
+      components: [errorContainer({ title: 'ID required', description: `Provide an **id** for the \`${scope}\` scope.` })],
+    });
+  }
+
+  const rows = await store.recentLogs({
+    userId: scope === 'user' ? id : null,
+    guildId: scope === 'guild' ? id : null,
+    limit,
+  });
+
+  const lines = rows.length
+    ? rows.map((r) => {
+        const when = `<t:${Math.floor(new Date(r.created_at).getTime() / 1000)}:R>`;
+        const status = r.success ? '✅' : '❌';
+        const where = r.guild_id ? ` · guild \`${r.guild_id}\`` : '';
+        return `> ${status} \`${r.source ?? '?'}\` \`${truncate(r.domain ?? r.url ?? '—', 40)}\` ${r.user_id ? `<@${r.user_id}>` : ''}${where} ${when}`;
+      })
+    : ['> No matching log rows yet.'];
+
+  await interaction.reply({
+    flags: V2 | MessageFlags.Ephemeral,
+    components: [
+      card({
+        emoji: '🧾',
+        title: `Bypass logs — ${scope}`,
+        subtitle: dbHealthy() ? 'live from Neon Postgres' : 'database offline',
+        body: [lines.join('\n')],
+      }),
+    ],
+  });
+}
+
+async function subMaintenance(interaction) {
+  const mode = interaction.options.getString('mode', true);
+  const on = mode === 'on';
+  store.setConfig('maintenance', on);
+
+  await interaction.reply({
+    flags: V2 | MessageFlags.Ephemeral,
+    components: [
+      card({
+        accent: on ? 0xfee75c : 0x57f287,
+        emoji: '🛠️',
+        title: on ? 'Maintenance mode — ON' : 'Maintenance mode — OFF',
+        body: [
+          on
+            ? 'Everyone except you now gets a maintenance notice. Owner commands keep working.'
+            : 'The bot is fully available again.',
+        ],
       }),
     ],
   });
@@ -425,7 +575,7 @@ async function subCooldown(interaction) {
 
   store.setCooldown(name, seconds);
 
-  const overrides = store.cooldownCfg;
+  const overrides = store.cooldownOverrides();
   const table = interaction.client.commands
     .map((cmd) => {
       const def = (cmd.meta?.cooldownMs ?? 0) / 1000;

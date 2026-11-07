@@ -23,8 +23,9 @@ export default {
     );
 
     const body = [
-      `**Everyone**\n**/bypass** \`url\` — bypass a supported gated link\n**/services** \`search\` — browse all supported services\n**/stats** — live bot & API statistics\n**/ping** — latency check\n**/invite** — invite the bot to your server`,
-      `**Bot owner**\n**/enable-autobypass** \`channel\` — auto-bypass supported links posted in a channel\n**/disable-autobypass** \`channel\` — disarm a channel\n**/autobypass-list** — list armed channels\n**/owner** — eval · servers · presence · broadcast · dm · blacklist · api · cache · cooldown · reboot`,
+      `**Everyone**\n**/bypass** \`url\` — bypass a supported gated link\n**Bypass Link** — right-click any message → Apps\n**/services** \`search\` — browse all supported services\n**/stats** — live bot & API statistics\n**/ping** — latency check\n**/invite** · **/help**`,
+      `**Server admins**\n**/enable-autobypass** \`channel\` \`channels\` — auto-bypass supported links posted in channels\n**/disable-autobypass** \`channel\` \`channels\` \`all\` — disarm channels (or everything)\n**/autobypass** — see what is armed in this server`,
+      `**Bot owner**\n**/owner** — eval · stats · logs · maintenance · servers · leave · presence · broadcast · dm · blacklist · api · cache · cooldown · reboot`,
       `-# Tip: results come with **📱 Mobile Copy**, **💻 PC Copy** and **🔗 Open Result** buttons. Paced key systems (Delta…) may pause for a one-time sign-in — the bot walks you through it.`,
     ];
 
