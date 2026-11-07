@@ -138,7 +138,7 @@ docker run --env-file .env bypassx-api-bot
 npm run smoke   # offline test of every component, command and container
 ```
 
-CI runs the same suite on every push.
+CI runs the same suite on every push. Runtime: Node 18.17+ (Node 20 recommended).
 
 ## 📄 License
 
