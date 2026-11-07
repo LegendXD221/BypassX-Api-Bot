@@ -83,9 +83,17 @@ surface entirely, and ship v1.2.0.
 
 ### Deploy
 
-- Pushed as v1.2.0 to the public repo; deployed on Render (free web service,
-  Node, `npm install` → `npm start`, health check `/health`, auto-deploy on
-  push, self-ping keep-alive against the 15-min idle spin-down).
+- v1.2.0 pushed to the public repo (`fb29bf9..fb95374`).
+- Render deploy: **in progress** — Render's *public-repo URL* onboarding is
+  failing platform-side right now (`passed in repository URL is invalid or
+  unfetchable`). Verified non-repo-specific via a control creation with a
+  top-100 GitHub repo (same 400). The repo itself is 100% anonymously fetchable
+  (HTML 200, codeload tarball 200, `git ls-remote` OK). An idempotent deploy
+  script (`scripts/render_deploy_bot.py` outside the public repo) retries
+  creation, waits for the first deploy to go live and verifies `/health` —
+  scheduled to keep retrying until Render recovers. Plan: free web service,
+  Node 20, `npm install` → `npm start`, health check `/health`, auto-deploy on
+  push, self-ping keep-alive against the free-tier idle spin-down.
 
 ---
 
