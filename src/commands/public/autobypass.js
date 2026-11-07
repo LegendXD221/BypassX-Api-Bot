@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, MessageFlags, InteractionContextType } from 'discord.js';
 import { store } from '../../db.js';
 import { V2, card } from '../../components.js';
 
@@ -10,7 +10,7 @@ export default {
   data: new SlashCommandBuilder()
     .setName('autobypass')
     .setDescription('Show which channels in this server have auto-bypass armed')
-    .setContexts(1), // InteractionContextType.Guild
+    .setContexts(InteractionContextType.Guild), // guild-only — server owners manage it there
   meta: { cooldownMs: 2000 },
 
   async execute(interaction) {

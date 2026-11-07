@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, MessageFlags, ChannelType } from 'discord.js';
+import { SlashCommandBuilder, MessageFlags, ChannelType, InteractionContextType } from 'discord.js';
 import { store } from '../../db.js';
 import { V2, card } from '../../components.js';
 import { canManageAutobypass, resolveChannels } from './enable-autobypass.js';
@@ -23,7 +23,7 @@ export default {
       o.setName('all').setDescription('Disarm every channel in this server')
     )
     .setDefaultMemberPermissions('8') // Administrator — hidden from non-admins
-    .setContexts(1), // InteractionContextType.Guild
+    .setContexts(InteractionContextType.Guild), // guild-only — server owners manage it there
   meta: { cooldownMs: 1000 },
 
   async execute(interaction) {

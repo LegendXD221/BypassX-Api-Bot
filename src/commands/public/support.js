@@ -11,14 +11,14 @@ export default {
   async execute(interaction) {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setURL(`${config.repoUrl}/issues`)
-        .setLabel('Report an issue')
-        .setEmoji('🐞')
-        .setStyle(ButtonStyle.Link),
-      new ButtonBuilder()
         .setURL(config.apiUrl)
         .setLabel('BypassX website')
         .setEmoji('🌐')
+        .setStyle(ButtonStyle.Link),
+      new ButtonBuilder()
+        .setURL(inviteUrl(interaction.client.user.id))
+        .setLabel('Re-invite the bot')
+        .setEmoji('🚀')
         .setStyle(ButtonStyle.Link)
     );
 
@@ -41,7 +41,7 @@ export default {
           subtitle: 'BypassX Api — support',
           body: [
             '**Quick fixes**\n• A link failed? Hit the **🔁 Try Again** button — paced key systems sometimes need a rerun.\n• Not sure if a service is supported? Check `/services`.\n• Curious about the bot health? `/stats` and `/ping` tell all.',
-            '**Still stuck?** Report it on GitHub with the link you tried and the error message — it gets fixed fast.',
+            '**Still stuck?** Reach out through the links below — include the link you tried and the error message, and it gets fixed fast.',
           ],
           rows: [row],
         }),

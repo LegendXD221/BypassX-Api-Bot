@@ -16,6 +16,7 @@
  * Tables: autobypass_channels · blacklist · counters · bot_config · bypass_logs
  */
 import pg from 'pg';
+import { Pool as NeonPool } from '@neondatabase/serverless';
 import { config } from './config.js';
 import { log } from './logger.js';
 
@@ -24,19 +25,27 @@ import { log } from './logger.js';
 /* ------------------------------------------------------------------ */
 
 let pool = null;
+let driver = 'tcp'; // 'tcp' = node-postgres · 'ws' = Neon serverless over HTTPS/WebSocket
 let dbOk = false;
 let reconnectTimer = null;
 
 function getPool() {
   if (!pool) {
-    pool = new pg.Pool({
-      connectionString: config.databaseUrl,
-      max: 4,
-      connectionTimeoutMillis: 10_000,
-      idleTimeoutMillis: 30_000,
-      ssl: { rejectUnauthorized: false },
-      application_name: 'bypassx-api-bot',
-    });
+    if (driver === 'tcp') {
+      pool = new pg.Pool({
+        connectionString: config.databaseUrl,
+        max: 4,
+        connectionTimeoutMillis: 5_000,
+        idleTimeoutMillis: 30_000,
+        ssl: { rejectUnauthorized: false },
+        application_name: 'bypassx-api-bot',
+      });
+    } else {
+      // Some hosts/firewalls block raw Postgres TCP (5432). The Neon serverless
+      // driver tunnels the same wire protocol over WebSocket/443 — same SQL,
+      // same result shapes, no other code changes needed.
+      pool = new NeonPool({ connectionString: config.databaseUrl, max: 4 });
+    }
     pool.on('error', (e) => log.warn(`db pool error: ${e.message}`));
   }
   return pool;
@@ -46,14 +55,34 @@ async function q(text, params = []) {
   if (!config.databaseUrl) return null;
   try {
     const res = await getPool().query(text, params);
-    if (!dbOk) {
-      dbOk = true;
-      log.ok('Database connection restored.');
-    }
+    dbOk = true;
     return res;
   } catch (e) {
-    if (dbOk) log.warn(`db query failed: ${e.message} — continuing memory-only`);
     dbOk = false;
+    // Transport-level TCP failure (blocked port, refused, timeout) → switch to
+    // the Neon WebSocket transport over HTTPS/443 and retry once. Real SQL
+    // errors (syntax, constraints — they carry `severity`) never trigger this.
+    const transportLike =
+      !e.severity ||
+      ['ECONNREFUSED', 'ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND', 'EAI_AGAIN', 'ERR_SOCKET_CONNECTION_TIMEOUT'].includes(e.code) ||
+      /timeout|terminated|connect/i.test(String(e.message ?? ''));
+    if (driver === 'tcp' && transportLike) {
+      driver = 'ws';
+      log.warn(`postgres TCP transport failing (${e.code || e.message || 'unknown'}) — switching to Neon WebSocket transport (HTTPS/443)`);
+      await shutdownDb();
+      try {
+        const res = await getPool().query(text, params);
+        dbOk = true;
+        log.ok('Database connected over WebSocket transport.');
+        scheduleReconnect();
+        return res;
+      } catch (e2) {
+        log.warn(`db query failed (ws): ${e2.message} — continuing memory-only`);
+        scheduleReconnect();
+        return null;
+      }
+    }
+    if (dbOk) log.warn(`db query failed: ${e.message} — continuing memory-only`);
     scheduleReconnect();
     return null;
   }
@@ -159,6 +188,7 @@ const blacklistCache = new Set(); // 'user:id' | 'guild:id'
 const countersCache = { bypasses: 0, autoBypasses: 0, failures: 0 };
 const cooldownCache = new Map(); // name | '*' -> seconds
 const configCache = new Map(); // key -> { value, at }
+const feedbackMemory = []; // /feedback entries when the DB is unreachable
 
 async function refreshAutobypass() {
   const res = await q('SELECT guild_id, channel_id FROM autobypass_channels');
@@ -334,6 +364,35 @@ export const store = {
   },
 
   /* ---------------------------------------------------------------- */
+  /* User feedback (/feedback → owners)                                */
+  /* ---------------------------------------------------------------- */
+
+  /** Atomic server-side append to the 'feedback' JSONB array (last 50 kept). */
+  appendFeedback(entry) {
+    feedbackMemory.push(entry);
+    if (feedbackMemory.length > 50) feedbackMemory.shift();
+    q(
+      `INSERT INTO bot_config (key, value) VALUES ('feedback', $1::jsonb)
+       ON CONFLICT (key) DO UPDATE SET
+         value = COALESCE((
+           SELECT jsonb_agg(elem ORDER BY ord)
+           FROM jsonb_array_elements(bot_config.value || $1::jsonb) WITH ORDINALITY AS t(elem, ord)
+           WHERE ord > GREATEST(0, jsonb_array_length(bot_config.value || $1::jsonb) - 50)
+         ), '[]'::jsonb),
+         updated_at = now()`,
+      [JSON.stringify([entry])]
+    ).catch(() => {});
+  },
+
+  /** Newest first. Prefers the database; falls back to in-memory entries. */
+  async recentFeedback(limit = 10) {
+    const res = await q(`SELECT value FROM bot_config WHERE key = 'feedback'`);
+    const rows = res?.rows?.[0]?.value;
+    if (Array.isArray(rows) && rows.length) return rows.slice(-limit).reverse();
+    return feedbackMemory.slice(-limit).reverse();
+  },
+
+  /* ---------------------------------------------------------------- */
   /* Bypass logs (audit trail + public stats)                          */
   /* ---------------------------------------------------------------- */
 
@@ -374,6 +433,46 @@ export const store = {
       last24hOk: dayRow.ok ?? 0,
       topDomains: domains?.rows ?? [],
       users: users?.rows?.[0]?.n ?? 0,
+    };
+  },
+
+  /** Personal usage stats — null when the DB is offline or history is empty. */
+  async userStats(userId) {
+    if (!dbOk) return null;
+    const [tot, day, week, fav] = await Promise.all([
+      q(`SELECT COUNT(*)::int AS n, COALESCE(SUM(CASE WHEN success THEN 1 ELSE 0 END),0)::int AS ok FROM bypass_logs WHERE user_id=$1`, [userId]),
+      q(`SELECT COUNT(*)::int AS n FROM bypass_logs WHERE user_id=$1 AND created_at > now() - interval '24 hours'`, [userId]),
+      q(`SELECT COUNT(*)::int AS n FROM bypass_logs WHERE user_id=$1 AND created_at > now() - interval '7 days'`, [userId]),
+      q(`SELECT domain FROM bypass_logs WHERE user_id=$1 AND success AND domain IS NOT NULL GROUP BY domain ORDER BY COUNT(*) DESC LIMIT 1`, [userId]),
+    ]);
+    const total = tot?.rows?.[0]?.n ?? null;
+    if (total == null || total === 0) return null;
+    return {
+      total,
+      successRate: Math.round(((tot?.rows?.[0]?.ok ?? 0) / total) * 100),
+      last24h: day?.rows?.[0]?.n ?? 0,
+      last7d: week?.rows?.[0]?.n ?? 0,
+      favorite: fav?.rows?.[0]?.domain ?? null,
+    };
+  },
+
+  /** Guild-scoped 30-day activity — null when the DB is offline. */
+  async guildStats(guildId) {
+    if (!dbOk) return null;
+    const [tot, dom, users] = await Promise.all([
+      q(`SELECT COUNT(*)::int AS n FROM bypass_logs WHERE guild_id=$1 AND created_at > now() - interval '30 days'`, [guildId]),
+      q(`SELECT domain, COUNT(*)::int AS n FROM bypass_logs WHERE guild_id=$1 AND success AND domain IS NOT NULL AND created_at > now() - interval '30 days' GROUP BY domain ORDER BY n DESC LIMIT 3`, [guildId]),
+      q(`SELECT COUNT(DISTINCT user_id)::int AS n FROM bypass_logs WHERE guild_id=$1 AND created_at > now() - interval '30 days'`, [guildId]),
+    ]);
+    if (tot?.rows?.[0]?.n == null) return null;
+    const total = tot.rows[0].n;
+    if (total === 0) return { total: 0, successRate: 0, users: 0, topDomains: [] };
+    const all = await q(`SELECT COALESCE(SUM(CASE WHEN success THEN 1 ELSE 0 END),0)::int AS ok FROM bypass_logs WHERE guild_id=$1`, [guildId]);
+    return {
+      total,
+      successRate: Math.round(((all?.rows?.[0]?.ok ?? 0) / total) * 100),
+      users: users?.rows?.[0]?.n ?? 0,
+      topDomains: dom?.rows ?? [],
     };
   },
 };

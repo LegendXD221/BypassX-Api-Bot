@@ -8,6 +8,7 @@ import { handleModal } from './modals.js';
 
 export async function onInteraction(interaction) {
   try {
+    if (interaction.isAutocomplete()) return await handleAutocomplete(interaction);
     if (interaction.isChatInputCommand() || interaction.isMessageContextMenuCommand()) {
       return await handleCommand(interaction);
     }
@@ -16,6 +17,20 @@ export async function onInteraction(interaction) {
   } catch (e) {
     log.err('Interaction handler error:', e);
   }
+}
+
+/** Slash-command option autocomplete — currently the /owner cooldown picker. */
+async function handleAutocomplete(interaction) {
+  if (interaction.commandName !== 'owner') return;
+  const focused = interaction.options.getFocused(true).find((o) => o.name === 'command');
+  if (!focused) return interaction.respond([]).catch(() => {});
+
+  const term = String(focused.value ?? '').toLowerCase().replace(/^\//, '');
+  const choices = ['*', ...interaction.client.commands.map((c) => c.data.name)]
+    .filter((name) => name.includes(term))
+    .slice(0, 25)
+    .map((name) => ({ name: name === '*' ? '* (every command)' : `/${name}`, value: name }));
+  return interaction.respond(choices).catch(() => {});
 }
 
 async function handleCommand(interaction) {

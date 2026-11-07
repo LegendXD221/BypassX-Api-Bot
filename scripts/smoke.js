@@ -133,7 +133,29 @@ assert.equal(normalizeBypassUrl('<https://linkvertise.com/1/x>'), 'https://linkv
 assert.equal(normalizeBypassUrl('linkvertise.com/1/x'), 'https://linkvertise.com/1/x', 'scheme added');
 assert.equal(normalizeBypassUrl('javascript:alert(1)'), null, 'dangerous scheme rejected');
 assert.equal(normalizeBypassUrl('ftp://x.com'), null, 'non-http scheme rejected');
+assert.equal(normalizeBypassUrl('https://user:pass@linkvertise.com/1/x'), null, 'embedded credentials rejected');
 ok('bypass-core: URL normalization');
+
+/* ---------- private / internal host blocking ---------- */
+const { isBlockedHost } = await import('../src/util.js');
+for (const host of [
+  'localhost', 'foo.localhost', '127.0.0.1', '10.1.2.3', '192.168.1.1',
+  '172.16.0.9', '172.31.255.1', '169.254.169.254', '0.0.0.0', '100.64.0.1',
+  '224.0.0.1', 'printer.local', 'nas.internal', 'box.lan', 'intranet',
+  '[::1]', '::1', 'fd00::1', 'fe80::1', '[::ffff:192.168.0.1]',
+]) {
+  assert.equal(isBlockedHost(host), true, `blocked host: ${host}`);
+}
+for (const host of ['linkvertise.com', 'sub.linkvertise.com', 'mega.nz', '8.8.8.8', '1.1.1.1']) {
+  assert.equal(isBlockedHost(host), false, `public host allowed: ${host}`);
+}
+for (const raw of [
+  'http://localhost/x', 'http://127.0.0.1/x', 'http://169.254.169.254/latest/meta-data',
+  'http://192.168.1.1/admin', 'http://intranet/x', 'http://[::1]/x',
+]) {
+  assert.equal(normalizeBypassUrl(raw), null, `SSRF target rejected: ${raw}`);
+}
+ok('security: private/internal host blocking (SSRF)');
 
 /* ---------- components v2 ---------- */
 const djs = await import('discord.js');
@@ -215,7 +237,7 @@ ok('components: all V2 containers + button rules');
 
 /* ---------- command registry ---------- */
 const { commandData } = await import('../src/commands/index.js');
-assert.equal(commandData.length, 12, '12 top-level commands');
+assert.equal(commandData.length, 19, '19 top-level commands');
 for (const c of commandData) {
   assert.ok(c.name && c.name.length <= 32, `valid name: ${c.name}`);
   // chat-input commands carry a description (≤100 chars); context menus don't have one
@@ -233,6 +255,13 @@ for (const expected of [
   'invite',
   'support',
   'autobypass',
+  'check',
+  'feedback',
+  'userinfo',
+  'botinfo',
+  'serverinfo',
+  'me',
+  'website',
   'enable-autobypass',
   'disable-autobypass',
   'owner',
@@ -241,13 +270,40 @@ for (const expected of [
 }
 const enableCmd = commandData.find((c) => c.name === 'enable-autobypass');
 assert.equal(enableCmd.default_member_permissions, '8', 'enable-autobypass is admin-gated at Discord level');
+assert.deepEqual(enableCmd.contexts, [0], 'enable-autobypass is GUILD-scoped (0 = Guild, never BotDM)');
 const disableCmd = commandData.find((c) => c.name === 'disable-autobypass');
 assert.equal(disableCmd.default_member_permissions, '8', 'disable-autobypass is admin-gated at Discord level');
+assert.deepEqual(disableCmd.contexts, [0], 'disable-autobypass is GUILD-scoped');
+const abCmd = commandData.find((c) => c.name === 'autobypass');
+assert.deepEqual(abCmd.contexts, [0], 'autobypass status is GUILD-scoped');
+const siCmd = commandData.find((c) => c.name === 'serverinfo');
+assert.deepEqual(siCmd.contexts, [0], 'serverinfo is GUILD-scoped');
+const bypassCmd = commandData.find((c) => c.name === 'bypass');
+assert.ok(bypassCmd.options.some((o) => o.name === 'hidden'), 'bypass has the hidden option');
 const contextCmd = commandData.find((c) => c.name === 'Bypass Link');
 assert.equal(contextCmd.type, 3, 'Bypass Link is a message context command');
 const ownerCmd = commandData.find((c) => c.name === 'owner');
-assert.equal(ownerCmd.options.length, 14, 'owner group has 14 subcommands');
+assert.equal(ownerCmd.options.length, 17, 'owner group has 17 subcommands');
+const cooldownOpt = ownerCmd.options.find((o) => o.name === 'cooldown').options.find((o) => o.name === 'command');
+assert.equal(cooldownOpt.autocomplete, true, 'owner cooldown command uses autocomplete');
 ok(`commands: ${commandData.length} registered, owner group complete`);
+
+/* ---------- no GitHub links anywhere in the bot surface ---------- */
+const surface = JSON.stringify(commandData);
+assert.ok(!/github\.com/i.test(surface), 'command payloads carry no GitHub links');
+const keyResultForHygiene = { kind: 'destination', url: 'https://mega.nz/file/abc123', serviceName: 'LootLabs', note: null, elapsedMs: 1, cached: false };
+for (const [label, container] of [
+  ['result', resultContainer({ sourceUrl: 'https://lootlabs.gg/l/abc', result: keyResultForHygiene })],
+  ['error', errorContainer({ title: 'x', description: 'y' })],
+  ['copy', copyContainer({ url: 'https://a.b/c', mode: 'm' })],
+  ['services', servicesContainer({ pageItems: [], page: 0, totalPages: 1, query: '', count: 0, domainCount: 0, token: 't' })],
+  ['broadcast', broadcastContainer({ message: 'hi', requesterTag: 'o#1' })],
+  ['leave', leaveCard({ name: 'G', id: '1', memberCount: 42 })],
+  ['oauth', oauthContainer({ siteName: 'Delta', action: { kind: 'oauth', provider: 'discord', authorizeUrl: 'https://discord.com/oauth2/authorize?x=1', ref: 'r', expiresInMs: 600000 }, note: 'n', sourceUrl: 'https://a.b/c', userId: '1' })],
+]) {
+  assert.ok(!/github\.com/i.test(JSON.stringify(container.toJSON())), `${label} card carries no GitHub links`);
+}
+ok('hygiene: zero GitHub links in every bot surface');
 
 /* ---------- autobypass permission helpers ---------- */
 const { canManageAutobypass } = await import('../src/commands/owner/enable-autobypass.js');

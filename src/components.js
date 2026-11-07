@@ -33,20 +33,46 @@ export function card({
   rows = [],
   footerText = null,
   footer = true,
+  thumb = null,
 }) {
   const c = new ContainerBuilder().setAccentColor(accent);
   const head = `## ${emoji ? `${emoji} ` : ''}${title}${subtitle ? `\n-# ${subtitle}` : ''}`;
-  c.addTextDisplayComponents((t) => t.setContent(head));
 
   const text = Array.isArray(body) ? body.filter(Boolean).join('\n\n') : String(body ?? '');
-  if (text.trim()) {
-    c.addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small).setDivider(true));
-    c.addTextDisplayComponents((t) => t.setContent(truncate(text, 3400)));
+  if (thumb && text.trim()) {
+    // Header + body share one section so the thumbnail sits beside both.
+    c.addSectionComponents((s) =>
+      s
+        .addTextDisplayComponents((t) => t.setContent(head), (t) => t.setContent(truncate(text, 3200)))
+        .setThumbnailAccessory((th) => th.setURL(thumb).setDescription('Avatar'))
+    );
+  } else {
+    c.addTextDisplayComponents((t) => t.setContent(head));
+    if (text.trim()) {
+      c.addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small).setDivider(true));
+      c.addTextDisplayComponents((t) => t.setContent(truncate(text, 3400)));
+    }
   }
 
   for (const row of rows) if (row) c.addActionRowComponents(row);
   if (footer) c.addTextDisplayComponents((t) => t.setContent(brand(footerText)));
   return c;
+}
+
+/**
+ * Incoming user feedback — DM'd to the bot owner and stored in Postgres.
+ */
+export function feedbackContainer({ from, userId, guild, message }) {
+  return card({
+    accent: config.colors.warning,
+    emoji: '📝',
+    title: 'User feedback',
+    body: [
+      truncate(message, 950),
+      `-# from **${truncate(from, 60)}** (\`${userId}\`)${guild ? ` · in **${truncate(guild, 40)}**` : ''}`,
+    ],
+    footerText: 'sent via /feedback',
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -55,7 +81,7 @@ export function card({
 
 /** The three signature buttons. "Open Result" only appears on https:// links. */
 export function resultButtons(resultUrl) {
-  const token = issueToken({ url: resultUrl });
+  const token = issueToken({ url: resultUrl }, 45 * 60_000);
   const row = new ActionRowBuilder();
   row.addComponents(
     new ButtonBuilder()

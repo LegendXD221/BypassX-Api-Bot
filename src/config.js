@@ -1,11 +1,14 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+// override: the repo's .env is authoritative for local runs — stale values
+// exported into a shell must not win (Render injects its own env separately).
+dotenv.config({ override: true });
 
 /**
  * Central configuration — everything comes from the environment so no
  * secret ever needs to live in the repo. See .env.example.
  */
 export const config = {
-  version: '1.1.0',
+  version: '1.2.0',
 
   // Discord
   token: process.env.DISCORD_TOKEN ?? '',
@@ -27,7 +30,6 @@ export const config = {
   minGuildMembers: Math.max(0, Number(process.env.MIN_GUILD_MEMBERS ?? 150)),
 
   // Runtime
-  repoUrl: 'https://github.com/LegendXD221/BypassX-Api-Bot',
   supportServerUrl: process.env.SUPPORT_SERVER_URL ?? '',
 
   colors: {

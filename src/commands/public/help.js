@@ -16,16 +16,16 @@ export default {
         .setEmoji('🚀')
         .setStyle(ButtonStyle.Link),
       new ButtonBuilder()
-        .setURL(config.repoUrl)
-        .setLabel('Source')
-        .setEmoji('📂')
+        .setURL(config.apiUrl)
+        .setLabel('BypassX Website')
+        .setEmoji('🌐')
         .setStyle(ButtonStyle.Link)
     );
 
     const body = [
-      `**Everyone**\n**/bypass** \`url\` — bypass a supported gated link\n**Bypass Link** — right-click any message → Apps\n**/services** \`search\` — browse all supported services\n**/stats** — live bot & API statistics\n**/ping** — latency check\n**/invite** · **/help**`,
+      `**Everyone**\n**/bypass** \`url\` \`[hidden]\` — bypass a supported gated link (hidden = only you see it)\n**Bypass Link** — right-click any message → Apps\n**/check** \`url\` — is this link supported? (no bypass, instant answer)\n**/services** \`search\` — browse all supported services\n**/stats** — live bot & API statistics · **/ping** — latency check\n**/botinfo** — about the bot · **/me** — your personal stats · **/userinfo** — user card\n**/serverinfo** — this server at a glance · **/website** — the official site\n**/invite** · **/help** · **/support** · **/feedback** — tell the owner anything`,
       `**Server admins**\n**/enable-autobypass** \`channel\` \`channels\` — auto-bypass supported links posted in channels\n**/disable-autobypass** \`channel\` \`channels\` \`all\` — disarm channels (or everything)\n**/autobypass** — see what is armed in this server`,
-      `**Bot owner**\n**/owner** — eval · stats · logs · maintenance · servers · leave · presence · broadcast · dm · blacklist · api · cache · cooldown · reboot`,
+      `**Bot owner**\n**/owner** — eval · stats · logs · feedback · maintenance · servers · leave · presence · broadcast · dm · blacklist · api · cache · cooldown · refresh · sweep · reboot`,
       `-# Tip: results come with **📱 Mobile Copy**, **💻 PC Copy** and **🔗 Open Result** buttons. Paced key systems (Delta…) may pause for a one-time sign-in — the bot walks you through it.`,
     ];
 

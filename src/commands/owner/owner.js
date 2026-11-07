@@ -21,6 +21,8 @@ import { truncate, sleep, formatUptime } from '../../util.js';
 import { V2, card, errorContainer, broadcastContainer } from '../../components.js';
 import { tokenStats } from '../../tokens.js';
 import * as api from '../../api.js';
+import { commandData } from '../index.js';
+import { runSmallGuildSweep } from '../../events/ready.js';
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const require = createRequire(import.meta.url);
@@ -183,9 +185,25 @@ export default {
       sc
         .setName('cooldown')
         .setDescription('Set a command cooldown in seconds (0 = reset to default)')
-        .addStringOption((o) => o.setName('command').setDescription('Command name or * for everything').setRequired(true))
+        .addStringOption((o) =>
+          o.setName('command').setDescription('Command name or * for everything').setRequired(true).setAutocomplete(true)
+        )
         .addIntegerOption((o) =>
           o.setName('seconds').setDescription('Seconds (0 resets)').setRequired(true).setMinValue(0).setMaxValue(3600)
+        )
+    )
+    .addSubcommand((sc) =>
+      sc.setName('refresh').setDescription('Re-register all slash commands globally (instant sync)')
+    )
+    .addSubcommand((sc) =>
+      sc.setName('sweep').setDescription('Run the small-guild sweep now — leave every server under the member threshold')
+    )
+    .addSubcommand((sc) =>
+      sc
+        .setName('feedback')
+        .setDescription('Recent user feedback from /feedback')
+        .addIntegerOption((o) =>
+          o.setName('limit').setDescription('How many (1-10, default 5)').setMinValue(1).setMaxValue(10)
         )
     )
     .addSubcommand((sc) => sc.setName('reboot').setDescription('Restart the bot process')),
@@ -228,6 +246,12 @@ export default {
         return subCache(interaction);
       case 'cooldown':
         return subCooldown(interaction);
+      case 'feedback':
+        return subFeedback(interaction);
+      case 'refresh':
+        return subRefresh(interaction);
+      case 'sweep':
+        return subSweep(interaction);
       case 'reboot':
         return subReboot(interaction);
       default:
@@ -594,6 +618,45 @@ async function subCooldown(interaction) {
         body: [table || '> No commands registered.'],
       }),
     ],
+  });
+}
+
+async function subRefresh(interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  try {
+    await interaction.client.application.commands.set(commandData);
+    await interaction.editReply({
+      content: `✅ Re-registered **${commandData.length}** global application commands.`,
+    });
+  } catch (e) {
+    await interaction.editReply({
+      content: `❌ Registration failed: \`${truncate(String(e?.message ?? e), 300)}\``,
+    });
+  }
+}
+
+async function subSweep(interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const left = await runSmallGuildSweep(interaction.client);
+  await interaction.editReply({
+    content: left
+      ? `🧹 Sweep complete — left **${left}** server${left === 1 ? '' : 's'} under the ${config.minGuildMembers}-member threshold.`
+      : `🧹 Sweep complete — every server is at or above ${config.minGuildMembers} members.`,
+  });
+}
+
+async function subFeedback(interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const rows = await store.recentFeedback(interaction.options.getInteger('limit') ?? 5);
+  const lines = rows.length
+    ? rows.map((r) => {
+        const when = r.at ? `<t:${Math.floor(new Date(r.at).getTime() / 1000)}:R>` : '';
+        return `> **${truncate(r.from ?? 'unknown', 40)}**${r.guild ? ` · ${truncate(r.guild, 30)}` : ''} ${when}\n> ${truncate(r.message ?? '', 200)}`;
+      })
+    : ['> No feedback received yet.'];
+  await interaction.editReply({
+    flags: V2 | MessageFlags.Ephemeral,
+    components: [card({ emoji: '📝', title: `Recent feedback (${rows.length})`, body: [lines.join('\n')] })],
   });
 }
 

@@ -26,12 +26,15 @@
   a rerun usually picks up where the previous attempt stopped
 - 🙌 **Guided OAuth handoff** — when Delta demands a one-time sign-in, the bot renders the
   sign-in button and a modal to paste the redirect URL, then resumes the chain automatically
+- 🧰 **Full toolkit** — `/check` (instant “is this supported?”), `/me`, `/serverinfo`, `/userinfo`, `/botinfo`, `/website`, `/feedback` (users DM the owner, owner reviews via `/owner feedback`)
 - 📡 **Auto-bypass, managed by server owners** — arm channels and every supported link
   posted there gets bypassed automatically (state lives in Postgres, survives restarts)
 - 🧹 **Auto-leave** — the bot automatically leaves servers with fewer than **150 members**
   (`MIN_GUILD_MEMBERS`, politely DMs the owner first)
 - 🧠 Result caching, per-user cooldowns, user & guild blacklist, bypass audit logs,
   lifetime counters — all persisted in **Neon Postgres (free tier)**
+- 🔄 **Dual database transport** — raw TCP first, automatic failover to Neon's
+  WebSocket transport (HTTPS/443) on networks that block Postgres ports
 - 🛡️ **No-exploit posture** — env-only secrets, server-side permission gates on every
   privileged command, opaque button tokens instead of raw URLs, strict URL validation,
   memory-only degradation if the database blips
@@ -41,24 +44,32 @@
 
 | Command | Description | Access |
 | --- | --- | --- |
-| `/bypass url` | Bypass a supported gated link | Everyone |
+| `/bypass url [hidden]` | Bypass a supported gated link (`hidden` = only you see it) | Everyone |
 | **Bypass Link** (message menu) | Right-click a message → Apps → bypass | Everyone |
+| `/check url` | Is this link supported? Instant registry lookup, no bypass | Everyone |
 | `/services [search]` | Browse all supported services (paginated) | Everyone |
 | `/stats` | Live bot & API statistics | Everyone |
+| `/me` | Your personal usage — totals, success rate, favourite service | Everyone |
 | `/ping` | Discord + API latency | Everyone |
+| `/botinfo` | Version, health, reach — everything about the bot | Everyone |
+| `/serverinfo` | This server at a glance + 30-day bypass activity | Everyone |
+| `/userinfo [user]` | Clean user card — account age, roles, boosts | Everyone |
+| `/website` | Open the official BypassX website | Everyone |
 | `/autobypass` | See which channels are armed in this server | Everyone |
-| `/help` · `/invite` · `/support` | Overview, invite, support | Everyone |
+| `/help` · `/invite` · `/support` · `/feedback` | Overview, invite, support, contact the owner | Everyone |
 | `/enable-autobypass [channel] [channels]` | Arm auto-bypass in up to 10 channels | Server owner / admins |
 | `/disable-autobypass [channel] [channels] [all]` | Disarm channels — or the whole server | Server owner / admins |
 | `/owner eval` | Run JavaScript in the bot process | Bot owner |
 | `/owner stats` | Deep global statistics + top domains | Bot owner |
 | `/owner logs [scope] [id]` | Recent bypass logs from the database | Bot owner |
+| `/owner feedback` | Review recent user feedback | Bot owner |
 | `/owner maintenance on/off` | Pause the bot for everyone but you | Bot owner |
 | `/owner servers` · `leave` | Guild list · leave a guild | Bot owner |
 | `/owner presence` | Set status / activity | Bot owner |
 | `/owner broadcast` · `dm` | Announce to all guilds · DM a user | Bot owner |
 | `/owner blacklist` | Blacklist users **and whole guilds** | Bot owner |
-| `/owner api` · `cache` · `cooldown` | API diagnostics · cache · cooldown overrides | Bot owner |
+| `/owner api` · `cache` · `cooldown` | API diagnostics · cache · cooldown overrides (autocomplete) | Bot owner |
+| `/owner refresh` · `sweep` | Re-register commands · run the small-guild sweep now | Bot owner |
 | `/owner reboot` | Restart the process | Bot owner |
 
 > Owner access = the Discord user IDs in `OWNER_IDS`. Auto-bypass management =
@@ -68,11 +79,9 @@
 ## 🚀 Setup
 
 1. **Node.js 18.17+**
-2. Clone and install
+2. Clone this repository (or your fork) and install
 
    ```bash
-   git clone https://github.com/LegendXD221/BypassX-Api-Bot.git
-   cd BypassX-Api-Bot
    npm install
    ```
 

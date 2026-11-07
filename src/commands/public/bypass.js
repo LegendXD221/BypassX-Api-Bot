@@ -9,7 +9,10 @@ export default {
     .setName('bypass')
     .setDescription('Bypass a supported gated link via the official BypassX API')
     .addStringOption((o) =>
-      o.setName('url').setDescription('The gated link to bypass').setRequired(true).setMaxLength(512)
+      o.setName('url').setDescription('The gated link to bypass').setRequired(true).setMaxLength(1024)
+    )
+    .addBooleanOption((o) =>
+      o.setName('hidden').setDescription('Only you can see the result (default: off)')
     ),
   meta: { cooldownMs: 4000 },
 
@@ -40,6 +43,11 @@ export default {
       });
     }
 
-    return runBypass({ interaction, url, source: 'command' });
+    return runBypass({
+      interaction,
+      url,
+      source: 'command',
+      hidden: interaction.options.getBoolean('hidden') ?? false,
+    });
   },
 };

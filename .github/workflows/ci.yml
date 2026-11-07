@@ -23,3 +23,10 @@ jobs:
 
       - name: Smoke test
         run: npm run smoke
+
+      - name: No GitHub links in the bot surface
+        run: |
+          if grep -riE "github[.]com" src README.md WORKLOG.md; then
+            echo "::error::GitHub links must never appear in the bot surface"
+            exit 1
+          fi

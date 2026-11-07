@@ -1,16 +1,18 @@
 import { ApiError, cacheGet, cacheSet, bypassUrl } from '../../api.js';
 import { store } from '../../db.js';
 import { V2, resultContainer, oauthContainer, errorContainer } from '../../components.js';
+import { isBlockedHost } from '../../util.js';
+import { MessageFlags } from 'discord.js';
 
 /**
  * Shared bypass flow used by `/bypass`, the "Bypass Link" message command and
  * the retry button. Assumes `url` was validated; handles cache, the API call,
  * OAuth handoffs, error cards and DB logging.
  */
-export async function runBypass({ interaction, url, source = 'command', userId = null }) {
+export async function runBypass({ interaction, url, source = 'command', userId = null, hidden = false }) {
   const requester = userId ?? interaction.user.id;
 
-  await interaction.deferReply();
+  await interaction.deferReply(hidden ? { flags: MessageFlags.Ephemeral } : undefined);
 
   const cached = cacheGet(url);
   let result;
@@ -92,7 +94,7 @@ function hostOf(url) {
   }
 }
 
-/** Validate a raw user string into an http(s) URL, or null. */
+/** Validate a raw user string into an http(s) URL pointing at a public host, or null. */
 export function normalizeBypassUrl(raw) {
   let value = String(raw ?? '').trim().replace(/^<|>$/g, '');
   if (!value || value.length > 2048) return null;
@@ -104,6 +106,7 @@ export function normalizeBypassUrl(raw) {
     const u = new URL(value);
     if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
     if (u.username || u.password) return null;
+    if (isBlockedHost(u.hostname)) return null;
     return u.href;
   } catch {
     return null;

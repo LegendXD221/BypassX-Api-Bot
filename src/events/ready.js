@@ -61,17 +61,23 @@ function startPresenceRotation(client) {
 /* member count after we joined (join-time check lives in guildCreate).*/
 /* ------------------------------------------------------------------ */
 
-function startSmallGuildSweep(client) {
-  const sweep = async () => {
-    for (const guild of client.guilds.cache.values()) {
-      const count = guild.memberCount ?? 0;
-      if (count && count < config.minGuildMembers) {
-        log.warn(`Sweep: leaving ${guild.name} (${guild.id}) — ${count} < ${config.minGuildMembers} members`);
-        if (count > 5) await dmOwnerBeforeLeaving(guild);
-        await guild.leave().catch(() => {});
-      }
+/** One sweep pass — exported so /owner sweep can trigger it on demand. */
+export async function runSmallGuildSweep(client) {
+  let left = 0;
+  for (const guild of client.guilds.cache.values()) {
+    const count = guild.memberCount ?? 0;
+    if (count && count < config.minGuildMembers) {
+      log.warn(`Sweep: leaving ${guild.name} (${guild.id}) — ${count} < ${config.minGuildMembers} members`);
+      if (count > 5) await dmOwnerBeforeLeaving(guild);
+      await guild.leave().catch(() => {});
+      left += 1;
     }
-  };
+  }
+  return left;
+}
+
+function startSmallGuildSweep(client) {
+  const sweep = () => runSmallGuildSweep(client);
   setTimeout(sweep, 60_000).unref();
   setInterval(sweep, 10 * 60_000).unref();
 }

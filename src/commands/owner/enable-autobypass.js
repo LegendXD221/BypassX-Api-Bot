@@ -3,6 +3,7 @@ import {
   ChannelType,
   MessageFlags,
   PermissionsBitField,
+  InteractionContextType,
 } from 'discord.js';
 import { store } from '../../db.js';
 import { V2, card, errorContainer } from '../../components.js';
@@ -66,7 +67,7 @@ export default {
         .setMaxLength(400)
     )
     .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
-    .setContexts(1), // InteractionContextType.Guild
+    .setContexts(InteractionContextType.Guild), // guild-only — server owners manage it there
   meta: { cooldownMs: 1000 },
 
   async execute(interaction) {
