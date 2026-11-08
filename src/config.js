@@ -8,7 +8,7 @@ dotenv.config({ override: true });
  * secret ever needs to live in the repo. See .env.example.
  */
 export const config = {
-  version: '1.2.0',
+  version: '1.3.0',
 
   // Discord
   token: process.env.DISCORD_TOKEN ?? '',

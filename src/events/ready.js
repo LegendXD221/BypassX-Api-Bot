@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import { log } from '../logger.js';
 import { commandData } from '../commands/index.js';
 import { refreshSupported } from '../api.js';
+import { startApiWatchdog } from '../watchdog.js';
 import { cleanupTokens } from '../tokens.js';
 import { leaveCard, V2 } from '../components.js';
 
@@ -16,6 +17,7 @@ export async function onReady(client) {
 
   startPresenceRotation(client);
   startSmallGuildSweep(client);
+  startApiWatchdog();
 
   refreshSupported(true);
   setInterval(() => refreshSupported(), 6 * 3600_000).unref();

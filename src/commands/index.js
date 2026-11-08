@@ -15,6 +15,8 @@ import botinfo from './public/botinfo.js';
 import serverinfo from './public/serverinfo.js';
 import me from './public/me.js';
 import website from './public/website.js';
+import status from './public/status.js';
+import recent from './public/recent.js';
 import enableAutobypass from './owner/enable-autobypass.js';
 import disableAutobypass from './owner/disable-autobypass.js';
 import owner from './owner/owner.js';
@@ -37,6 +39,8 @@ for (const cmd of [
   serverinfo,
   me,
   website,
+  status,
+  recent,
   enableAutobypass,
   disableAutobypass,
   owner,

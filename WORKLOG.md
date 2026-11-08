@@ -4,6 +4,53 @@ Honest running log of decisions, changes and incidents. Newest first.
 
 ---
 
+## 2026-11-08 — v1.3.0 "Mobile raw copy + reliability + /status & /recent"
+
+- ASK: "Mobile Copy button should only give the raw result and nothing else —
+  only the bypassed raw result like `free_hahauah`; make the bot more reliable
+  by adding more features and commands; remove the owner commands section from
+  the /help menu."
+- MOBILE RAW COPY: `bxcopy:m:*` now replies a bare ephemeral
+  `content` message — exactly the result string (key like `free_…` or the bare
+  link), no container, no header, no footer. PC Copy keeps the code-block
+  card; Open Result unchanged. Mobile long-press now copies nothing but the
+  result.
+- HELP MENU: owner command line removed from `/help` (the `/owner` command
+  still exists and stays double-gated: interactionCreate guard + command-side
+  guard). Public section now lists `/recent` and `/status`. README owner rows
+  replaced with a single "private owner-maintenance commands exist but are
+  intentionally not documented" note.
+- RELIABILITY (4 layers):
+  1. `fetchWithRetry` in api.js — transport resets and 408/429/5xx retried
+     with 0.8s/2.2s backoff, honors sane Retry-After; a full timeout gets
+     exactly one automatic retry (server-side pace memory makes a rerun pick
+     up where it stopped); 4xx never retries. Wired into both `bypassUrl`
+     and `resumeOauth`.
+  2. `src/watchdog.js` — probes the API every 5 min independent of traffic;
+     3 consecutive failures → `degraded` flag + one warn log; recovery logs
+     we're back. Surfaced in `/status`.
+  3. Gateway events — Client Error/Warn + Shard Disconnect/Reconnecting/
+     Resume all logged (was: silent socket trouble).
+  4. `loginResilient` — up to 3 login attempts (5s/15s backoff) for transient
+     network errors; invalid-token and disallowed-intents fail fast (the
+     intent fallback path still works).
+- NEW COMMANDS:
+  - `/status` — deep diagnostics: gateway + shard ping, live API probe +
+    watchdog state + registry freshness, database transport (Postgres vs
+    memory-only), cache/token metrics, first-try success rate, maintenance
+    mode, version. Distinct from `/stats` (usage numbers).
+  - `/recent` — your last 5 successful (deduped) bypasses with one ⚡ "Run #n"
+    button each; rerun goes through the normal bypass flow, result stays
+    ephemeral; buttons carry the requester's id (30 min TTL).
+- INFRA: commands registered 19 → 21; version 1.3.0; smoke asserts the new
+  surface (`ago()` cases, watchdog zero-state, /status + /recent presence,
+  21 commands). SMOKE PASS 12/12 check groups.
+- NOTE: /recent rerun buttons reuse `runBypass` with `hidden:true` — on a
+  button interaction deferReply(ephemeral) → editReply renders the whole
+  result card ephemerally; source recorded as `recent` in bypass_logs.
+
+---
+
 ## 2026-11-08 — DEPLOYED LIVE on Render (image-runtime workaround)
 
 **Status: LIVE.** `https://nexobypass-api.onrender.com` · service id

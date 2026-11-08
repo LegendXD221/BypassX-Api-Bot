@@ -1,6 +1,6 @@
 {
   "name": "bypassx-api-bot",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "The official BypassX Discord bot — bypass gated links with one command. Components V2, server-managed auto-bypass, Neon Postgres, mobile/PC copy buttons.",
   "main": "src/index.js",
   "type": "module",

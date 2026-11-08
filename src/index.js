@@ -2,6 +2,7 @@ import http from 'node:http';
 import { Client, GatewayIntentBits, Partials, Events } from 'discord.js';
 import { config } from './config.js';
 import { log } from './logger.js';
+import { sleep, truncate } from './util.js';
 import { initDb, shutdownDb } from './db.js';
 import { commands } from './commands/index.js';
 import { onReady } from './events/ready.js';
@@ -25,7 +26,39 @@ function buildClient(intents) {
   client.on(Events.MessageCreate, onMessage);
   client.on(Events.GuildCreate, onGuildCreate);
   client.on(Events.GuildDelete, onGuildDelete);
+  // Gateway resilience — never die silently on socket trouble.
+  client.on(Events.Error, (e) => log.err('Client error:', e));
+  client.on(Events.Warn, (m) => log.warn(`client warn: ${m}`));
+  client.on(Events.ShardDisconnect, (_e, id) => log.warn(`Shard ${id} disconnected — discord.js will reconnect.`));
+  client.on(Events.ShardReconnecting, (id) => log.warn(`Shard ${id} reconnecting…`));
+  client.on(Events.ShardResume, (id) => log.ok(`Shard ${id} resumed — session kept.`));
   return client;
+}
+
+function buildAndLogin(intents) {
+  const client = buildClient(intents);
+  return client.login(config.token).then(() => client);
+}
+
+/**
+ * Login with bounded retries for transient network problems (DNS hiccups,
+ * cold Redis/gateway blips). Token and intent errors are config problems —
+ * they surface immediately instead of looping.
+ */
+async function loginResilient(intents, attempts = 3) {
+  const delays = [5_000, 15_000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await buildAndLogin(intents);
+    } catch (e) {
+      const msg = String(e?.message ?? e);
+      if (/disallowed intents/i.test(msg)) throw e; // caller handles the intent fallback
+      if (/invalid|unauthorized/i.test(msg) && /token/i.test(msg)) throw e; // bad token will not fix itself
+      if (attempt >= delays.length) throw e;
+      log.warn(`Login attempt ${attempt + 1} failed (${truncate(msg, 120)}) — retrying in ${delays[attempt] / 1000}s…`);
+      await sleep(delays[attempt]);
+    }
+  }
 }
 
 /** Health endpoint — Render (and anything else) probes this to keep us alive. */
@@ -61,17 +94,15 @@ async function main() {
 
   let client;
   try {
-    client = buildClient(FULL_INTENTS);
-    await client.login(config.token);
+    client = await loginResilient(FULL_INTENTS);
   } catch (e) {
     const msg = String(e?.message ?? e);
     if (/disallowed intents/i.test(msg)) {
       log.err('MESSAGE CONTENT intent is not enabled — auto-bypass will be OFF.');
       log.err('Enable it at https://discord.com/developers/applications → your app → Bot → Privileged Gateway Intents.');
       log.err('Everything else (bypass, copy buttons, stats) keeps working.');
-      client = buildClient(BASE_INTENTS);
+      client = await loginResilient(BASE_INTENTS);
       client.autobypassDisabled = true;
-      await client.login(config.token);
     } else {
       throw e;
     }

@@ -10,6 +10,7 @@ import {
 import { config } from '../config.js';
 import { store } from '../db.js';
 import { bypassUrl, ApiError, cacheGet, cacheSet } from '../api.js';
+import { runBypass } from '../commands/public/bypass-core.js';
 import { truncate } from '../util.js';
 import {
   V2,
@@ -27,6 +28,7 @@ import { supported } from '../api.js';
 export async function handleButton(interaction) {
   const id = interaction.customId;
   if (id.startsWith('bxcopy:')) return handleCopy(interaction);
+  if (id.startsWith('bxrerun:')) return handleRerun(interaction);
   if (id.startsWith('bxsvc:')) return handleServicesNav(interaction);
   if (id.startsWith('bxretry:')) return handleRetry(interaction);
   if (id.startsWith('bxoauth:')) return handleOauthButton(interaction);
@@ -45,9 +47,46 @@ async function handleCopy(interaction) {
       })
       .catch(() => {});
   }
+  // Mobile → ONLY the raw result (e.g. the key or the bare link), nothing
+  // else: no header, no formatting, no card. Long-press copies it cleanly.
+  if (mode === 'm') {
+    return interaction.reply({
+      content: String(t.url).slice(0, 1990),
+      flags: MessageFlags.Ephemeral,
+    });
+  }
   return interaction.reply({
     flags: V2 | MessageFlags.Ephemeral,
     components: [copyContainer({ url: t.url, mode })],
+  });
+}
+
+/* ---------------- /recent rerun buttons ---------------- */
+
+async function handleRerun(interaction) {
+  const t = takeToken(interaction.customId.slice('bxrerun:'.length));
+  if (!t || t.kind !== 'rerun') {
+    return interaction
+      .reply({
+        flags: V2 | MessageFlags.Ephemeral,
+        components: [errorContainer({ title: 'Expired', description: 'These rerun buttons expired — run `/recent` again for a fresh list.' })],
+      })
+      .catch(() => {});
+  }
+  if (t.userId && interaction.user.id !== t.userId) {
+    return interaction
+      .reply({
+        flags: V2 | MessageFlags.Ephemeral,
+        components: [errorContainer({ title: 'Not your history', description: 'Only the person who ran `/recent` can rerun these links.' })],
+      })
+      .catch(() => {});
+  }
+  await runBypass({
+    interaction,
+    url: t.url,
+    source: 'recent',
+    userId: interaction.user.id,
+    hidden: true,
   });
 }
 

@@ -237,7 +237,7 @@ ok('components: all V2 containers + button rules');
 
 /* ---------- command registry ---------- */
 const { commandData } = await import('../src/commands/index.js');
-assert.equal(commandData.length, 19, '19 top-level commands');
+assert.equal(commandData.length, 21, '21 top-level commands');
 for (const c of commandData) {
   assert.ok(c.name && c.name.length <= 32, `valid name: ${c.name}`);
   // chat-input commands carry a description (≤100 chars); context menus don't have one
@@ -309,6 +309,24 @@ ok('hygiene: zero GitHub links in every bot surface');
 const { canManageAutobypass } = await import('../src/commands/owner/enable-autobypass.js');
 assert.equal(typeof canManageAutobypass, 'function');
 ok('autobypass: permission helper exported');
+
+/* ---------- v1.3.0: /status + /recent + time-ago ---------- */
+const statusCmd = commandData.find((c) => c.name === 'status');
+assert.ok(statusCmd, '/status is registered');
+assert.match(statusCmd.description, /System status/i, '/status describes diagnostics');
+const recentCmd = commandData.find((c) => c.name === 'recent');
+assert.ok(recentCmd, '/recent is registered');
+const { ago } = await import('../src/util.js');
+assert.equal(ago(new Date(Date.now() - 30_000)), '30s ago');
+assert.equal(ago(new Date(Date.now() - 5 * 60_000)), '5m ago');
+assert.equal(ago(new Date(Date.now() - 3 * 3600_000)), '3h ago');
+assert.equal(ago(new Date(Date.now() - 2 * 86400_000)), '2d ago');
+assert.equal(ago('not-a-date'), 'unknown');
+const { apiHealth } = await import('../src/watchdog.js');
+assert.deepEqual(apiHealth(), { consecutiveFailures: 0, lastOkAt: 0, lastRunAt: 0, lastStatus: null, degraded: false }, 'watchdog state starts clean');
+const buttonsModule = await import('../src/events/buttons.js');
+assert.equal(typeof buttonsModule.handleButton, 'function', 'rerun/copy button router exports');
+ok('v1.3.0: /status, /recent, ago(), watchdog state');
 
 /* ---------- done ---------- */
 console.log(`\nSMOKE PASS — ${passed} check groups, all green.`);

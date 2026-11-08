@@ -20,13 +20,19 @@
 - 🖱️ **Bypass Link** — right-click any message → Apps → the first supported link gets bypassed
 - 🧩 **Components V2 native** — clean accent cards, never a wall of embeds
 - 📱 **Mobile Copy · 💻 PC Copy · 🔗 Open Result** buttons on every result
-  (mobile replies plain text for long-press, PC replies a code block with one-click copy,
+  (mobile replies the **raw result only** — bare key or link, perfect for long-press copy —
+  PC replies a code block with one-click copy,
   Open Result only renders on `https://` results)
 - 🔁 **Try Again button** — paced key systems sometimes enforce a checkpoint rhythm;
   a rerun usually picks up where the previous attempt stopped
 - 🙌 **Guided OAuth handoff** — when Delta demands a one-time sign-in, the bot renders the
   sign-in button and a modal to paste the redirect URL, then resumes the chain automatically
-- 🧰 **Full toolkit** — `/check` (instant “is this supported?”), `/me`, `/serverinfo`, `/userinfo`, `/botinfo`, `/website`, `/feedback` (users DM the owner, owner reviews via `/owner feedback`)
+- 🧰 **Full toolkit** — `/check` (instant “is this supported?”), `/recent` (rerun past bypasses
+  with one tap), `/status` (system health), `/me`, `/serverinfo`, `/userinfo`, `/botinfo`,
+  `/website`, `/feedback`
+- 🛡️ **Self-healing runtime** — API calls retry transient failures with backoff, an independent
+  watchdog probes the BypassX API every 5 minutes, the gateway logs disconnect/resume events,
+  and login retries network hiccups before giving up
 - 📡 **Auto-bypass, managed by server owners** — arm channels and every supported link
   posted there gets bypassed automatically (state lives in Postgres, survives restarts)
 - 🧹 **Auto-leave** — the bot automatically leaves servers with fewer than **150 members**
@@ -49,6 +55,8 @@
 | `/check url` | Is this link supported? Instant registry lookup, no bypass | Everyone |
 | `/services [search]` | Browse all supported services (paginated) | Everyone |
 | `/stats` | Live bot & API statistics | Everyone |
+| `/status` | System health — gateway, API, database, cache diagnostics | Everyone |
+| `/recent` | Your recent successful bypasses with one-tap rerun buttons | Everyone |
 | `/me` | Your personal usage — totals, success rate, favourite service | Everyone |
 | `/ping` | Discord + API latency | Everyone |
 | `/botinfo` | Version, health, reach — everything about the bot | Everyone |
@@ -59,22 +67,11 @@
 | `/help` · `/invite` · `/support` · `/feedback` | Overview, invite, support, contact the owner | Everyone |
 | `/enable-autobypass [channel] [channels]` | Arm auto-bypass in up to 10 channels | Server owner / admins |
 | `/disable-autobypass [channel] [channels] [all]` | Disarm channels — or the whole server | Server owner / admins |
-| `/owner eval` | Run JavaScript in the bot process | Bot owner |
-| `/owner stats` | Deep global statistics + top domains | Bot owner |
-| `/owner logs [scope] [id]` | Recent bypass logs from the database | Bot owner |
-| `/owner feedback` | Review recent user feedback | Bot owner |
-| `/owner maintenance on/off` | Pause the bot for everyone but you | Bot owner |
-| `/owner servers` · `leave` | Guild list · leave a guild | Bot owner |
-| `/owner presence` | Set status / activity | Bot owner |
-| `/owner broadcast` · `dm` | Announce to all guilds · DM a user | Bot owner |
-| `/owner blacklist` | Blacklist users **and whole guilds** | Bot owner |
-| `/owner api` · `cache` · `cooldown` | API diagnostics · cache · cooldown overrides (autocomplete) | Bot owner |
-| `/owner refresh` · `sweep` | Re-register commands · run the small-guild sweep now | Bot owner |
-| `/owner reboot` | Restart the process | Bot owner |
 
 > Owner access = the Discord user IDs in `OWNER_IDS`. Auto-bypass management =
 > the **server owner** and members with **Administrator** — enforced server-side,
-> and the commands are hidden from non-admins by Discord itself.
+> and the commands are hidden from non-admins by Discord itself. Private
+> owner-maintenance commands exist but are intentionally not documented here.
 
 ## 🚀 Setup
 

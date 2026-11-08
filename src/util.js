@@ -85,6 +85,19 @@ export function formatUptime(seconds) {
 
 export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** Human "time ago" from a Date, ISO string or epoch ms — for history lists. */
+export function ago(input) {
+  const t = input instanceof Date ? input.getTime() : Date.parse(input);
+  if (!Number.isFinite(t)) return 'unknown';
+  const s = Math.max(1, Math.floor((Date.now() - t) / 1000));
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
 /** Simple per-key cooldown: `hit` arms the key and reports remaining seconds. */
 export class Cooldowns {
   #map = new Map();
