@@ -65,6 +65,20 @@ export async function onMessage(message) {
 
     const cached = cacheGet(target);
     let result = cached;
+
+    // First feedback — "@user bypassing your link…" while the bypass runs.
+    // Skipped for cache hits (the result lands instantly anyway) and removed
+    // again once the result card or the ❌ failure reaction takes over.
+    let ack = null;
+    if (!cached) {
+      ack = await message.channel
+        .send({
+          content: `${message.author} bypassing your link…`,
+          allowedMentions: { users: [message.author.id] },
+        })
+        .catch(() => null);
+    }
+
     if (!result) {
       try {
         result = await bypassUrl(target);
@@ -82,6 +96,7 @@ export async function onMessage(message) {
           error: e.message,
         });
         log.warn(`Auto-bypass failed (${target}): ${e.message}`);
+        if (ack) ack.delete().catch(() => {});
         message.react('❌').catch(() => {});
         return;
       }
@@ -103,6 +118,7 @@ export async function onMessage(message) {
       components: [resultContainer({ sourceUrl: target, result, auto: true })],
       allowedMentions: { parse: [] },
     });
+    if (ack) ack.delete().catch(() => {});
   } catch (e) {
     log.err('Auto-bypass handler error:', e);
   }

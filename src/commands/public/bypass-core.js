@@ -14,6 +14,15 @@ export async function runBypass({ interaction, url, source = 'command', userId =
 
   await interaction.deferReply(hidden ? { flags: MessageFlags.Ephemeral } : undefined);
 
+  // Immediate acknowledgement — the deferred placeholder becomes
+  // "@user bypassing your link…" until the result replaces it.
+  await interaction
+    .editReply({
+      content: `<@${requester}> bypassing your link…`,
+      allowedMentions: { users: [requester] },
+    })
+    .catch(() => {});
+
   const cached = cacheGet(url);
   let result;
   let wasCached = false;
@@ -40,6 +49,7 @@ export async function runBypass({ interaction, url, source = 'command', userId =
           ? e.message
           : 'Something went wrong while contacting the BypassX API.';
       return interaction.editReply({
+        content: '',
         components: [
           errorContainer({
             title: e?.code === 'UNAUTHORIZED' ? 'API key rejected' : 'Bypass failed',
@@ -67,6 +77,7 @@ export async function runBypass({ interaction, url, source = 'command', userId =
 
   if (result.kind === 'oauth') {
     return interaction.editReply({
+      content: '',
       components: [
         oauthContainer({
           siteName: result.serviceName,
@@ -81,6 +92,7 @@ export async function runBypass({ interaction, url, source = 'command', userId =
   }
 
   await interaction.editReply({
+    content: '',
     components: [resultContainer({ sourceUrl: url, result, auto: source === 'autobypass' })],
     flags: V2,
   });

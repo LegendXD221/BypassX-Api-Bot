@@ -328,5 +328,17 @@ const buttonsModule = await import('../src/events/buttons.js');
 assert.equal(typeof buttonsModule.handleButton, 'function', 'rerun/copy button router exports');
 ok('v1.3.0: /status, /recent, ago(), watchdog state');
 
+/* ---------- v1.4.0: "bypassing your link…" acknowledgement ---------- */
+const { readFileSync } = await import('node:fs');
+const url = (p) => new URL(p, import.meta.url);
+const coreSrc = readFileSync(url('../src/commands/public/bypass-core.js'), 'utf8');
+assert.match(coreSrc, /bypassing your link/, 'runBypass sends the ack after defer');
+assert.match(coreSrc, /allowedMentions: \{ users: \[requester\] \}/, 'ack mention scoped to the requester');
+assert.match(coreSrc, /content: '',/, 'final cards clear the ack text');
+const autoSrc = readFileSync(url('../src/events/messageCreate.js'), 'utf8');
+assert.match(autoSrc, /bypassing your link/, 'auto-bypass sends the ack');
+assert.match(autoSrc, /ack\.delete\(\)/, 'auto-bypass removes the ack after the outcome');
+ok('v1.4.0: bypassing-your-link ack on /bypass + auto-bypass');
+
 /* ---------- done ---------- */
 console.log(`\nSMOKE PASS — ${passed} check groups, all green.`);

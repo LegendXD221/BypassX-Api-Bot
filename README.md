@@ -34,7 +34,10 @@
   watchdog probes the BypassX API every 5 minutes, the gateway logs disconnect/resume events,
   and login retries network hiccups before giving up
 - 📡 **Auto-bypass, managed by server owners** — arm channels and every supported link
-  posted there gets bypassed automatically (state lives in Postgres, survives restarts)
+  posted there gets bypassed automatically (state lives in Postgres, survives restarts);
+  the bot pings the poster with **“bypassing your link…”** while it works
+- 👋 **Live acknowledgement** — `/bypass` (and its retry/rerun buttons) immediately shows
+  **“@you bypassing your link…”** until the result card replaces it
 - 🧹 **Auto-leave** — the bot automatically leaves servers with fewer than **150 members**
   (`MIN_GUILD_MEMBERS`, politely DMs the owner first)
 - 🧠 Result caching, per-user cooldowns, user & guild blacklist, bypass audit logs,
