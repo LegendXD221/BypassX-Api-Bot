@@ -475,4 +475,17 @@ export const store = {
       topDomains: dom?.rows ?? [],
     };
   },
+
+  /** Zero the lifetime counters (dashboard "stats reset"). */
+  async resetCounters() {
+    for (const k of Object.keys(countersCache)) countersCache[k] = 0;
+    await q('UPDATE counters SET value = 0');
+  },
+
+  /** Delete bypass logs older than N days — returns rows removed (null when DB off). */
+  async pruneLogs(days = 30) {
+    const d = Math.max(1, Math.min(365, Number(days) || 30));
+    const res = await q('DELETE FROM bypass_logs WHERE created_at < now() - ($1 || \' days\')::interval RETURNING id', [String(d)]);
+    return res ? res.rowCount : null;
+  },
 };

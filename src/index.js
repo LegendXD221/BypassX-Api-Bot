@@ -10,6 +10,7 @@ import { onInteraction } from './events/interactionCreate.js';
 import { onMessage } from './events/messageCreate.js';
 import { onGuildCreate } from './events/guildCreate.js';
 import { onGuildDelete } from './events/guildDelete.js';
+import { handleDashboard } from './dashboard.js';
 
 const FULL_INTENTS = [
   GatewayIntentBits.Guilds,
@@ -17,6 +18,9 @@ const FULL_INTENTS = [
   GatewayIntentBits.MessageContent, // privileged — required for auto-bypass
 ];
 const BASE_INTENTS = [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages];
+
+let client = null;
+let activeIntents = FULL_INTENTS;
 
 function buildClient(intents) {
   const client = new Client({ intents, partials: [Partials.Message, Partials.Channel] });
@@ -61,27 +65,54 @@ async function loginResilient(intents, attempts = 3) {
   }
 }
 
-/** Health endpoint — Render (and anything else) probes this to keep us alive. */
-function startHealthServer(client) {
+/** Health + owner dashboard — Render probes /health to keep us alive. */
+function startHealthServer(ctx) {
   const server = http.createServer((req, res) => {
-    if (req.url?.startsWith('/health')) {
+    const url = new URL(req.url ?? '/', 'http://localhost');
+    if (url.pathname === '/health' || url.pathname.startsWith('/health')) {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(
         JSON.stringify({
           ok: true,
           uptime: Math.floor(process.uptime()),
-          guilds: client.guilds?.cache?.size ?? null,
+          guilds: ctx.getClient()?.guilds?.cache?.size ?? null,
           ts: Date.now(),
         })
       );
-    } else {
-      res.writeHead(200, { 'content-type': 'text/plain' });
-      res.end('⚡ BypassX Api is running');
+      return;
     }
+    if (url.pathname === '/dashboard' || url.pathname.startsWith('/dashboard/')) {
+      handleDashboard(req, res, url, ctx);
+      return;
+    }
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    res.end('⚡ BypassX Api is running');
   });
   server.listen(Number(process.env.PORT ?? 3000), () =>
     log.ok(`Health server listening on :${process.env.PORT ?? 3000}`)
   );
+}
+
+/** Dashboard action: bounce the gateway without killing the HTTP server. */
+function restartClient() {
+  return (async () => {
+    log.warn('dashboard requested gateway restart — destroying client…');
+    try {
+      await client?.destroy();
+    } catch {
+      /* already dead */
+    }
+    client = await loginResilient(activeIntents);
+    client.autobypassDisabled = activeIntents === BASE_INTENTS;
+    log.ok('client re-logged in after dashboard restart');
+  })().catch((e) => log.err('dashboard restart failed:', e));
+}
+
+/** Shared by SIGINT/SIGTERM and the dashboard shutdown action. */
+function gracefulShutdown() {
+  log.info('shutdown requested — closing.');
+  client?.destroy().catch(() => {});
+  shutdownDb().finally(() => process.exit(0));
 }
 
 async function main() {
@@ -92,9 +123,10 @@ async function main() {
 
   await initDb();
 
-  let client;
+  let booted;
   try {
     client = await loginResilient(FULL_INTENTS);
+    booted = FULL_INTENTS;
   } catch (e) {
     const msg = String(e?.message ?? e);
     if (/disallowed intents/i.test(msg)) {
@@ -102,13 +134,19 @@ async function main() {
       log.err('Enable it at https://discord.com/developers/applications → your app → Bot → Privileged Gateway Intents.');
       log.err('Everything else (bypass, copy buttons, stats) keeps working.');
       client = await loginResilient(BASE_INTENTS);
-      client.autobypassDisabled = true;
+      booted = BASE_INTENTS;
     } else {
       throw e;
     }
   }
+  activeIntents = booted;
+  client.autobypassDisabled = booted === BASE_INTENTS;
 
-  startHealthServer(client);
+  startHealthServer({
+    getClient: () => client,
+    restart: restartClient,
+    shutdown: gracefulShutdown,
+  });
 
   // Render free web services spin down after inactivity — ping ourselves so
   // the bot stays online 24/7.
@@ -123,11 +161,7 @@ async function main() {
   process.on('uncaughtException', (e) => log.err('Uncaught exception:', e));
 
   for (const sig of ['SIGINT', 'SIGTERM']) {
-    process.on(sig, () => {
-      log.info(`${sig} received — shutting down.`);
-      client.destroy().catch(() => {});
-      shutdownDb().finally(() => process.exit(0));
-    });
+    process.on(sig, gracefulShutdown);
   }
 }
 

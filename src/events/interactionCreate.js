@@ -54,6 +54,15 @@ async function handleCommand(interaction) {
         description: 'BypassX Api is being tuned right now — try again in a minute.',
       });
     }
+
+    // Per-command kill switch, toggled from the owner dashboard.
+    const disabled = await store.getConfig('disabledCommands', []);
+    if (Array.isArray(disabled) && disabled.includes(interaction.commandName)) {
+      return replyEphemeral(interaction, {
+        title: 'Command unavailable',
+        description: `\`/${interaction.commandName}\` is currently turned off by the bot owner.`,
+      });
+    }
   }
 
   // Blacklist — users and whole guilds.

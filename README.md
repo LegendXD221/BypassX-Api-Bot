@@ -113,6 +113,28 @@ application — set `GUILD_ID` for instant registration in your test server).
 | `MIN_GUILD_MEMBERS` | – | Auto-leave threshold (default `150`, `0` disables) |
 | `SUPPORT_SERVER_URL` | – | Optional invite shown by `/support` |
 | `GUILD_ID` | – | Test guild for instant command registration |
+| `DASHBOARD_TOKEN` | – | Unlocks the owner web console at `/dashboard` — **dashboard stays 404-hidden when unset** |
+
+## 🎛️ Owner dashboard
+
+The bot serves a private web console on the same port as `/health`:
+
+```
+https://<your-service-url>/dashboard?token=<DASHBOARD_TOKEN>
+```
+
+- **Token-gated** — every route checks the token (timing-safe compare, header or query param);
+  a wrong token gets `401`, and with `DASHBOARD_TOKEN` unset the whole dashboard answers `404` like it doesn't exist
+- **Live overview** — every guild with name, ID, member count, channel count, armed
+  auto-bypass channels, blacklist state + bot uptime, WS ping, memory, cache, API health,
+  lifetime counters, recent bypass log — auto-refreshing every 15s
+- **32 owner actions** in five groups:
+  - *Messaging* — DM a user, send to a channel, broadcast to every armed auto-bypass channel, broadcast to one guild
+  - *Guilds* — full guild details, channel list, one-tap invite link, find-user (with shared servers), force-leave
+  - *Bot control* — presence, avatar, username, maintenance mode, global auto-bypass kill switch, gateway restart, shutdown
+  - *Moderation* — blacklist/whitelist users & guilds, per-command cooldowns, per-command disable/enable
+  - *Data & API* — clear cache, refresh service registry, API probe, log export (JSON), log pruning, counter reset, sandboxed `eval_js`
+- Danger-zone actions require an extra confirm; every run is echoed to the console pane and logged
 
 ## 📡 Auto-bypass
 

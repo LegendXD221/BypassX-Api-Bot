@@ -8,7 +8,7 @@ dotenv.config({ override: true });
  * secret ever needs to live in the repo. See .env.example.
  */
 export const config = {
-  version: '1.4.0',
+  version: '1.5.0',
 
   // Discord
   token: process.env.DISCORD_TOKEN ?? '',
@@ -31,6 +31,9 @@ export const config = {
 
   // Runtime
   supportServerUrl: process.env.SUPPORT_SERVER_URL ?? '',
+
+  // Owner dashboard (https://…/dashboard?token=…) — disabled entirely when unset
+  dashboardToken: process.env.DASHBOARD_TOKEN ?? '',
 
   colors: {
     primary: 0x5865f2,

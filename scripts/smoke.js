@@ -340,5 +340,75 @@ assert.match(autoSrc, /bypassing your link/, 'auto-bypass sends the ack');
 assert.match(autoSrc, /ack\.delete\(\)/, 'auto-bypass removes the ack after the outcome');
 ok('v1.4.0: bypassing-your-link ack on /bypass + auto-bypass');
 
+/* ---------- v1.5.0: owner dashboard ---------- */
+const dash = await import('../src/dashboard.js');
+assert.equal(typeof dash.handleDashboard, 'function');
+const EXPECTED_ACTIONS = [
+  'dm_user', 'channel_send', 'broadcast_all', 'broadcast_guild',
+  'guild_details', 'guild_channels', 'guild_invite', 'leave_guild', 'find_user',
+  'set_maintenance', 'set_presence', 'clear_presence', 'set_avatar', 'set_username',
+  'reconnect_gateway', 'shutdown', 'run_autoleave',
+  'blacklist_user', 'unblacklist_user', 'blacklist_guild', 'unblacklist_guild',
+  'blacklist_list', 'set_cooldown', 'disable_command', 'enable_command', 'toggle_autobypass',
+  'clear_cache', 'refresh_services', 'stats_reset', 'prune_logs', 'eval_js', 'test_api',
+];
+for (const a of EXPECTED_ACTIONS) assert.equal(typeof dash.ACTIONS[a], 'function', `action exists: ${a}`);
+assert.ok(dash.actionNames().length >= 30, `dashboard exposes ${dash.actionNames().length} actions`);
+
+const page = await import('../src/dashboard-page.js');
+assert.match(page.dashboardHtml(), /Owner Console/);
+assert.match(page.dashboardLoginHtml(), /DASHBOARD_TOKEN/);
+
+// Route/auth behaviour with mocked req/res.
+const cfg = (await import('../src/config.js')).config;
+function mockRes() {
+  return {
+    code: 0, body: '',
+    writeHead(c) { this.code = c; },
+    end(b) { this.body = b == null ? '' : String(b); },
+  };
+}
+function mockReq(body) {
+  const buf = [Buffer.from(body == null ? '' : body)];
+  return {
+    method: body == null ? 'GET' : 'POST',
+    headers: {},
+    async *[Symbol.asyncIterator]() { yield* buf; },
+  };
+}
+const ctx = { getClient: () => null, restart() {}, shutdown() {} };
+const u = (s) => new URL(`http://x${s}`);
+
+cfg.dashboardToken = 'test-tok-123';
+let r = mockRes();
+await dash.handleDashboard(mockReq(), r, u('/dashboard'), ctx);
+assert.equal(r.code, 200);
+assert.match(r.body, /Owner Console/, 'no token → login page');
+
+r = mockRes();
+await dash.handleDashboard(mockReq(), r, u('/dashboard/api/overview?token=wrong'), ctx);
+assert.equal(r.code, 401, 'wrong token → 401');
+
+r = mockRes();
+await dash.handleDashboard(mockReq(), r, u('/dashboard/api/overview?token=test-tok-123'), ctx);
+assert.equal(r.code, 200, 'correct token → 200');
+const ov = JSON.parse(r.body);
+assert.ok(Array.isArray(ov.guilds.list) && typeof ov.bot.version === 'string', 'overview payload shaped');
+
+r = mockRes();
+await dash.handleDashboard(mockReq('{"action":"nope"}'), r, u('/dashboard/api/action?token=test-tok-123'), ctx);
+assert.equal(r.code, 400, 'unknown action → 400');
+
+r = mockRes();
+await dash.handleDashboard(mockReq(''), r, u('/dashboard/api/action?token=test-tok-123'), ctx);
+assert.equal(r.code, 400, 'action without body → 400');
+
+cfg.dashboardToken = '';
+r = mockRes();
+await dash.handleDashboard(mockReq(), r, u('/dashboard'), ctx);
+assert.equal(r.code, 404, 'token unset → whole dashboard 404s');
+
+ok(`v1.5.0: dashboard online — ${dash.actionNames().length} owner actions, auth verified`);
+
 /* ---------- done ---------- */
 console.log(`\nSMOKE PASS — ${passed} check groups, all green.`);
