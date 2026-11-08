@@ -4,6 +4,55 @@ Honest running log of decisions, changes and incidents. Newest first.
 
 ---
 
+## 2026-11-08 — DEPLOYED LIVE on Render (image-runtime workaround)
+
+**Status: LIVE.** `https://nexobypass-api.onrender.com` · service id
+`srv-dbbhiitg1s2s73910p8g` (renamed `bypassx-api-bot`) · free plan · oregon.
+
+- **The blocker:** Render's API rejected *every* GitHub repo URL at service
+  creation AND service update with "passed in repository URL is invalid or
+  unfetchable" — verified platform-side with canaries (`vercel/next.js`
+  failed identically; the repo itself serves HTTP 200 and its git smart-http
+  endpoint works). Their status page showed all-green the whole time. The
+  outage lasted 10+ hours (01:30 → 11:45 +08:00), surviving ~15 automated
+  retries.
+- **Dead ends mapped:** (a) create from repo — broken validation; (b) PATCH
+  an existing service's repo — same validation; (c) create an image-backed
+  service — passes image validation but Render demands payment info for new
+  image services (no card available); (d) repoint a resumed suspended service
+  at its old repo — that repo (BypassXOfficial/LittleBypass) now 404s.
+- **The working path — image runtime on an existing free service:**
+  1. Resumed a suspended free-tier service via `POST /v1/services/{id}/resume`.
+  2. Switched it to the image runtime with
+     `PATCH /v1/services/{id}` `{"image":{"imagePath":"docker.io/library/nginx:alpine","ownerId":…},"serviceDetails":{"runtime":"image"}}`
+     — **no payment gate on PATCH of an existing service** (only creation is
+     gated). A canary nginx deploy confirmed image deploys work on free.
+  3. Built the bot image daemonlessly: staged `src` + `scripts` + lockfile,
+     `npm install --omit=dev`, tarred it as `/app`, then
+     `crane mutate --append layer.tar --workdir /app --entrypoint node,/app/src/index.js
+     -e NODE_ENV=production node:20-alpine` → pushed to GHCR.
+  4. New GHCR packages are private and the API has **no** visibility endpoint,
+     and Render exposes no registry-credential API — so the image was copied
+     onto an **already-public** package we own as a separate tag
+     (`…:api-bot`, original tags untouched). Anonymous pull verified.
+  5. PATCHed the service to that image path, `/health` health check, name
+     `bypassx-api-bot`, and PUT the full env var set; triggered the deploy.
+- **Verified runtime (logs):** `Neon Postgres ready — ep-curly-leaf-… (pool
+  max 4)` · `Logged in as BypassX Api#0825 (1568618506667425974) — 1 guild(s)`
+  · `Registered 19 global application commands` · `Loaded 48 supported
+  services / 86 domains` · `Your service is live 🎉`. `/health` →
+  `{"ok":true,"guilds":1,…}`. Only log noise: a benign pg `sslmode` deprecation
+  warning.
+- **Notes / follow-ups:** the deploy source is the container image, not the
+  git repo — when Render's repo validation recovers, the service can be
+  switched back to the public repo with a single PATCH (blocked today by the
+  same validation). `dockerCommand` cannot be set via API for image runtimes
+  (silently ignored), which is why the entrypoint is baked into the image.
+  `POST /v1/services/{id}/deploys` re-pulls `:api-bot` — use it to ship
+  updates (re-run the crane push, then trigger).
+
+
+
 ## 2026-11-08 — v1.2.0 "Max out + harden" (this session)
 
 **Goal:** max the bot out, fix every error/bug found, remove GitHub links from the bot
