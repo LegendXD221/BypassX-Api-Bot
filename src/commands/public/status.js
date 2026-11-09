@@ -5,7 +5,8 @@ import { apiHealth } from '../../watchdog.js';
 import { store, dbHealthy } from '../../db.js';
 import { tokenStats } from '../../tokens.js';
 import { formatUptime } from '../../util.js';
-import { V2, card } from '../../components.js';
+import { V2, card, statusPanel } from '../../components.js';
+import { diffBlock } from '../../format.js';
 
 /**
  * Deep system diagnostics — the "is everything working" command, distinct
@@ -33,21 +34,30 @@ export default {
     const successRate =
       metrics.apiCalls > 0 ? Math.round(((metrics.apiCalls - metrics.apiFailures) / metrics.apiCalls) * 100) : null;
 
-    const apiLine = live.ok
-      ? `🟢 Online — ${live.ms}ms${watchdog.degraded ? ' · ⚠️ watchdog marked it degraded earlier' : ''}`
-      : `🔴 Unreachable (HTTP ${live.status || 'no response'}) — transient failures auto-retry`;
-    const dbLine = config.databaseUrl
-      ? dbOk
-        ? '🟢 Neon Postgres connected'
-        : '🟡 Unreachable — running memory-only (auto-reconnects every 60s)'
-      : '⚪ Not configured — memory-only mode';
-
     const body = [
-      `**Gateway**\n🟢 Connected · shard ping ${wsPing} · uptime ${formatUptime(process.uptime())} · ${servers} server${servers === 1 ? '' : 's'}`,
-      `**BypassX API**\n${apiLine}\n-# watchdog: ${watchdog.consecutiveFailures} failed probe(s) · last probe HTTP ${watchdog.lastStatus ?? '—'} · registry ${supported.count || '—'} services${supported.fetchedAt ? ` · refreshed ${Math.round((Date.now() - supported.fetchedAt) / 60000)} min ago` : ''}`,
-      `**Database**\n${dbLine}`,
-      `**Runtime**\nresult cache ${cache.size} entr${cache.size === 1 ? 'y' : 'ies'} · ${metrics.cacheHits} cache hit${metrics.cacheHits === 1 ? '' : 's'} · ${metrics.apiCalls} API call${metrics.apiCalls === 1 ? '' : 's'} this uptime${successRate != null ? ` · ${successRate}% reached the API first try` : ''} · ${tokenStats()} active interaction token${tokenStats() === 1 ? '' : 's'}`,
-      `**Settings**\nv${config.version} · maintenance ${await store.getConfig('maintenance', false) ? '🟡 ON' : '🟢 off'} · auto-leave threshold ${config.minGuildMembers}+ members${config.apiKey ? '' : '\n⚠️ No API key configured — bypasses are offline'}`,
+      statusPanel(
+        [
+          ['gateway', `connected · ping ${wsPing}`, 'ok'],
+          ['uptime', formatUptime(process.uptime()), 'info'],
+          ['servers', `${servers}`, 'info'],
+          ['bx api', live.ok ? `online · ${live.ms}ms` : `unreachable (HTTP ${live.status || 'no response'})`, live.ok ? 'ok' : 'err'],
+          ['database', config.databaseUrl ? (dbOk ? 'neon postgres connected' : 'memory-only — reconnecting') : 'not configured', config.databaseUrl ? (dbOk ? 'ok' : 'warn') : 'info'],
+          ['result cache', `${cache.size} entries · ${metrics.cacheHits} hits`, 'info'],
+          ['maintenance', (await store.getConfig('maintenance', false)) ? 'ON' : 'off', (await store.getConfig('maintenance', false)) ? 'warn' : 'ok'],
+          ['version', `v${config.version}`, 'info'],
+        ],
+        { title: 'BYPASSX SYSTEM' }
+      ),
+      diffBlock({
+        info: ['services'],
+        add: [`${supported.count || '—'} services · ${supported.domainCount || '—'} domains registered`],
+        warn: [
+          ...(watchdog.degraded ? ['watchdog marked the API degraded earlier'] : []),
+          ...(config.apiKey ? [] : ['no API key configured — bypasses are offline']),
+        ],
+        max: 400,
+      }),
+      `-# watchdog: ${watchdog.consecutiveFailures} failed probe(s) · last probe HTTP ${watchdog.lastStatus ?? '—'} · registry ${supported.fetchedAt ? `refreshed ${Math.round((Date.now() - supported.fetchedAt) / 60000)} min ago` : 'never'} · ${metrics.apiCalls} API call${metrics.apiCalls === 1 ? '' : 's'} this uptime${successRate != null ? ` · ${successRate}% first-try` : ''} · ${tokenStats()} active token${tokenStats() === 1 ? '' : 's'} · auto-leave ${config.minGuildMembers}+`,
     ];
 
     await interaction.editReply({

@@ -237,7 +237,7 @@ ok('components: all V2 containers + button rules');
 
 /* ---------- command registry ---------- */
 const { commandData } = await import('../src/commands/index.js');
-assert.equal(commandData.length, 21, '21 top-level commands');
+assert.equal(commandData.length, 40, '39 top-level commands (v2.0 catalog)');
 for (const c of commandData) {
   assert.ok(c.name && c.name.length <= 32, `valid name: ${c.name}`);
   // chat-input commands carry a description (≤100 chars); context menus don't have one
@@ -265,6 +265,11 @@ for (const expected of [
   'enable-autobypass',
   'disable-autobypass',
   'owner',
+  // v2.0 catalog
+  'bx', 'utility', 'fun', 'server', 'info',
+  'leaderboard', 'history', 'serviceinfo', 'randomservice', 'docs',
+  'changelog', 'privacy', 'reminder', 'poll', 'faq',
+  'shortcuts', 'uptime', 'tip', 'commands',
 ]) {
   assert.ok(names.includes(expected), `command registered: ${expected}`);
 }
@@ -283,10 +288,21 @@ assert.ok(bypassCmd.options.some((o) => o.name === 'hidden'), 'bypass has the hi
 const contextCmd = commandData.find((c) => c.name === 'Bypass Link');
 assert.equal(contextCmd.type, 3, 'Bypass Link is a message context command');
 const ownerCmd = commandData.find((c) => c.name === 'owner');
-assert.equal(ownerCmd.options.length, 17, 'owner group has 17 subcommands');
+assert.equal(ownerCmd.options.length, 23, 'owner group has 23 subcommands (17 legacy + sql/avatar/username/cmdstats/prune/config)');
 const cooldownOpt = ownerCmd.options.find((o) => o.name === 'cooldown').options.find((o) => o.name === 'command');
 assert.equal(cooldownOpt.autocomplete, true, 'owner cooldown command uses autocomplete');
-ok(`commands: ${commandData.length} registered, owner group complete`);
+
+// Unique names + subcommand count — the "100+ commands" contract.
+assert.equal(new Set(names).size, names.length, 'no duplicate command names');
+let invokables = 0;
+for (const c of commandData) {
+  invokables += 1;
+  if (c.type === 1 && Array.isArray(c.options)) {
+    invokables += c.options.filter((o) => o.type === 1).length;
+  }
+}
+assert.ok(invokables >= 100, `invokable commands >= 100 (got ${invokables})`);
+ok(`commands: ${commandData.length} top-level · ${invokables} invokable actions, owner group complete`);
 
 /* ---------- no GitHub links anywhere in the bot surface ---------- */
 const surface = JSON.stringify(commandData);
@@ -353,11 +369,37 @@ const EXPECTED_ACTIONS = [
   'clear_cache', 'refresh_services', 'stats_reset', 'prune_logs', 'eval_js', 'test_api',
 ];
 for (const a of EXPECTED_ACTIONS) assert.equal(typeof dash.ACTIONS[a], 'function', `action exists: ${a}`);
-assert.ok(dash.actionNames().length >= 30, `dashboard exposes ${dash.actionNames().length} actions`);
+assert.ok(dash.actionNames().length >= 55, `dashboard exposes ${dash.actionNames().length} actions (>= 55, v2)`);
+
+// v2.0 action registry additions
+for (const a of [
+  'send_embed', 'dm_guild_owner', 'fetch_message',
+  'guild_roles', 'guild_emojis', 'guild_invites', 'guild_bans', 'guild_members', 'member_info',
+  'member_kick', 'member_ban', 'member_timeout', 'create_channel', 'delete_channel',
+  'create_role', 'delete_role', 'set_status', 'reload_commands', 'dump_env',
+  'sql_query', 'bypass_url', 'feedback_list', 'feedback_clear', 'command_counts', 'preview_diff',
+]) {
+  assert.equal(typeof dash.ACTIONS[a], 'function', `v2 action exists: ${a}`);
+}
+
+// danger-zone set grew with the new destructive actions
+for (const a of ['member_kick', 'member_ban', 'delete_channel', 'delete_role', 'feedback_clear']) {
+  assert.ok(Array.isArray(dash.DANGER) ? dash.DANGER.includes(a) : dash.DANGER.has(a), `danger-zoned: ${a}`);
+}
 
 const page = await import('../src/dashboard-page.js');
-assert.match(page.dashboardHtml(), /Owner Console/);
+const dashHtml = page.dashboardHtml();
+assert.match(dashHtml, /Owner Console v2/, 'v2 dashboard title');
+assert.match(dashHtml, /Owner Console/, 'dashboard title');
 assert.match(page.dashboardLoginHtml(), /DASHBOARD_TOKEN/);
+// v2 UI: sidebar tabs + action palette + command usage table + console drawer
+for (const marker of ['tab-overview', 'tab-guilds', 'tab-actions', 'tab-commands', 'tab-logs', 'tab-config', 'actFilter', 'id="commands"', 'id="console"']) {
+  assert.ok(dashHtml.includes(marker), `v2 dashboard surface contains: ${marker}`);
+}
+// every registered action id must appear in the palette UI metadata
+for (const a of dash.actionNames()) {
+  assert.ok(dashHtml.includes(`'${a}'`) || dashHtml.includes(`"${a}"`), `palette lists action: ${a}`);
+}
 
 // Route/auth behaviour with mocked req/res.
 const cfg = (await import('../src/config.js')).config;
@@ -408,7 +450,52 @@ r = mockRes();
 await dash.handleDashboard(mockReq(), r, u('/dashboard'), ctx);
 assert.equal(r.code, 404, 'token unset → whole dashboard 404s');
 
-ok(`v1.5.0: dashboard online — ${dash.actionNames().length} owner actions, auth verified`);
+ok(`v2.0: dashboard online — ${dash.actionNames().length} owner actions, auth verified`);
+
+/* ---------- v2.0: rich message formats (diff / ansi) ---------- */
+const fmt = await import('../src/format.js');
+const diffOkOut = fmt.diffOk('boostylink fixed');
+assert.match(diffOkOut, /^```diff\n\+ boostylink fixed\n```$/, 'diffOk renders a green diff block');
+const db = fmt.diffBlock({ add: ['ok1'], del: ['bad1'], warn: ['warn1'], info: ['hdr'] });
+assert.match(db, /\+ ok1/, 'diff block + line');
+assert.match(db, /- bad1/, 'diff block - line');
+assert.match(db, /! warn1/, 'diff block ! line');
+assert.match(db, /@@ hdr @@/, 'diff block @@ header');
+assert.ok(!fmt.codeBlock('txt', 'has ``` inside').includes('``` inside'), 'codeBlock escapes inner fences');
+const kvt = fmt.kvTable([['key1', 'v1'], ['longer-key', 'v2']], { title: 'T' });
+assert.match(kvt, /key1\s+│ v1/, 'kvTable aligns pipes');
+assert.match(kvt, /── T /, 'kvTable renders title rule');
+assert.match(fmt.bar(50), /▰{5}▱{5} 50%/, 'bar renders half full');
+const ansiPanel = fmt.ansiBlock([fmt.ansi.green('ok'), fmt.ansi.red('bad')]);
+assert.ok(ansiPanel.includes('\u001b[0;32m') && ansiPanel.includes('\u001b[0;31m'), 'ansiBlock carries ANSI colors');
+assert.equal(fmt.cut('abcdef', 4).length, 4, 'cut trims with ellipsis');
+ok('v2.0: format engine — diff/ansi/kvTable/bar/codeBlock all verified');
+
+/* ---------- v2.0: formats actually reach the cards ---------- */
+const resultJson = JSON.stringify(resultContainer({ sourceUrl: 'https://boostylink.com/x', result: keyResultForHygiene }).toJSON());
+assert.match(resultJson, /```diff/, 'result card renders the result in a diff block');
+assert.match(resultJson, /\+ https:\/\/mega\.nz/, 'result card diff line is a green + destination');
+const errJson = JSON.stringify(errorContainer({ title: 'Bypass failed', description: 'wall hit' }).toJSON());
+assert.match(errJson, /```diff\\n- wall hit/, 'error card renders a red diff line');
+const pingCmd2 = await import('../src/commands/public/ping.js');
+assert.ok(pingCmd2.default, 'ping imports clean with statusPanel');
+
+/* ---------- v2.0: poll button router + catalog ---------- */
+const pollMod = await import('../src/commands/public/poll.js');
+assert.equal(typeof pollMod.handlePollButton, 'function', 'poll exposes its button handler');
+const { categorize, countInvokables, categoryFor, CATEGORY_META } = await import('../src/commands/catalog.js');
+const { commands: coll } = await import('../src/commands/index.js');
+assert.equal(coll.size, 40, 'collection holds all 39');
+assert.equal(categoryFor('bx'), 'bypass', 'bx categorized as bypass');
+assert.equal(categoryFor('utility'), 'utility', 'utility categorized');
+assert.equal(categoryFor('nonexistent-cmd'), 'meta', 'unknown falls to meta');
+const groups = categorize(coll);
+assert.equal(countInvokables(coll), invokables, 'catalog invokable count matches smoke count');
+for (const cat of Object.keys(CATEGORY_META)) {
+  assert.ok(groups.has(cat) || cat === 'owner', `category populated: ${cat}`);
+}
+assert.ok(groups.get('owner').some((c) => c.name === 'owner'), 'owner group lists the owner suite');
+ok('v2.0: poll router + command catalog wiring verified');
 
 /* ---------- done ---------- */
 console.log(`\nSMOKE PASS — ${passed} check groups, all green.`);

@@ -19,6 +19,7 @@ import {
 } from '../../api.js';
 import { truncate, sleep, formatUptime } from '../../util.js';
 import { V2, card, errorContainer, broadcastContainer } from '../../components.js';
+import { kvTable, codeBlock } from '../../format.js';
 import { tokenStats } from '../../tokens.js';
 import * as api from '../../api.js';
 import { commandData } from '../index.js';
@@ -206,7 +207,41 @@ export default {
           o.setName('limit').setDescription('How many (1-10, default 5)').setMinValue(1).setMaxValue(10)
         )
     )
-    .addSubcommand((sc) => sc.setName('reboot').setDescription('Restart the bot process')),
+    .addSubcommand((sc) => sc.setName('reboot').setDescription('Restart the bot process'))
+    .addSubcommand((sc) =>
+      sc
+        .setName('sql')
+        .setDescription('Run a READ-ONLY SQL query against the database')
+        .addStringOption((o) => o.setName('query').setDescription('SELECT/WITH/SHOW/EXPLAIN only').setRequired(true).setMaxLength(500))
+    )
+    .addSubcommand((sc) =>
+      sc
+        .setName('avatar')
+        .setDescription('Set the bot avatar from an image URL')
+        .addStringOption((o) => o.setName('url').setDescription('Image URL').setRequired(true).setMaxLength(500))
+    )
+    .addSubcommand((sc) =>
+      sc
+        .setName('username')
+        .setDescription('Change the bot username (max 2/hour — Discord enforced)')
+        .addStringOption((o) => o.setName('name').setDescription('New username').setRequired(true).setMaxLength(32))
+    )
+    .addSubcommand((sc) =>
+      sc
+        .setName('cmdstats')
+        .setDescription('Per-command usage counters from the database')
+    )
+    .addSubcommand((sc) =>
+      sc
+        .setName('prune')
+        .setDescription('Delete bypass logs older than N days')
+        .addIntegerOption((o) => o.setName('days').setDescription('Older than N days (default 30)').setMinValue(1).setMaxValue(365))
+    )
+    .addSubcommand((sc) =>
+      sc
+        .setName('config')
+        .setDescription('Dump every live flag — maintenance, disabled commands, cooldowns')
+    ),
   ownerOnly: true,
   meta: { cooldownMs: 500 },
 
@@ -254,6 +289,18 @@ export default {
         return subSweep(interaction);
       case 'reboot':
         return subReboot(interaction);
+      case 'sql':
+        return subSql(interaction);
+      case 'avatar':
+        return subAvatar(interaction);
+      case 'username':
+        return subUsername(interaction);
+      case 'cmdstats':
+        return subCmdstats(interaction);
+      case 'prune':
+        return subPrune(interaction);
+      case 'config':
+        return subConfig(interaction);
       default:
         return;
     }
@@ -666,4 +713,142 @@ async function subReboot(interaction) {
     components: [card({ accent: 0xfee75c, emoji: '🔄', title: 'Rebooting', body: ['Process is restarting now — expect a short offline window.'] })],
   });
   setTimeout(() => process.exit(0), 750);
+}
+
+/* ------------------------------------------------------------------ */
+/* v2.0 owner additions                                                */
+/* ------------------------------------------------------------------ */
+
+async function subSql(interaction) {
+  const query = String(interaction.options.getString('query', true)).trim();
+  if (!/^(select|with|show|explain|table)\b/i.test(query) || /;.*(insert|update|delete|drop|alter|truncate|create)/i.test(query)) {
+    return interaction.reply({
+      flags: V2 | MessageFlags.Ephemeral,
+      components: [errorContainer({ title: 'Read-only enforced', description: 'Only `SELECT` / `WITH` / `SHOW` / `EXPLAIN` / `TABLE` queries run here.' })],
+    });
+  }
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  try {
+    const res = await store.rawQuery(query);
+    const rows = res?.rows ?? [];
+    const body = rows.length
+      ? codeBlock('json', truncate(JSON.stringify(rows, null, 1), 1700))
+      : codeBlock('ml', '0 rows returned');
+    await interaction.editReply({
+      flags: V2 | MessageFlags.Ephemeral,
+      components: [card({ emoji: '🗄️', title: `SQL — ${rows.length} row(s)`, body: [truncate(query, 150), body] })],
+    });
+  } catch (e) {
+    await interaction.editReply({
+      flags: V2 | MessageFlags.Ephemeral,
+      components: [errorContainer({ title: 'SQL failed', description: truncate(String(e?.message ?? e), 300) })],
+    });
+  }
+}
+
+async function subAvatar(interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  try {
+    await interaction.client.user.setAvatar(interaction.options.getString('url', true));
+    await interaction.editReply({
+      flags: V2 | MessageFlags.Ephemeral,
+      components: [card({ emoji: '🎨', title: 'Avatar updated', body: ['Propagation can take a few minutes across clients.'] })],
+    });
+  } catch (e) {
+    await interaction.editReply({
+      flags: V2 | MessageFlags.Ephemeral,
+      components: [errorContainer({ title: 'Avatar rejected', description: truncate(String(e?.message ?? e), 300) })],
+    });
+  }
+}
+
+async function subUsername(interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  try {
+    await interaction.client.user.setUsername(interaction.options.getString('name', true));
+    await interaction.editReply({
+      flags: V2 | MessageFlags.Ephemeral,
+      components: [card({ emoji: '🪪', title: 'Username updated', body: ['Discord allows this twice per hour — mind the rate limit.'] })],
+    });
+  } catch (e) {
+    await interaction.editReply({
+      flags: V2 | MessageFlags.Ephemeral,
+      components: [errorContainer({ title: 'Username rejected', description: truncate(String(e?.message ?? e), 300) })],
+    });
+  }
+}
+
+async function subCmdstats(interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const counts = await store.commandCounts();
+  if (!counts.length) {
+    return interaction.editReply({
+      flags: V2 | MessageFlags.Ephemeral,
+      components: [card({ emoji: '📊', title: 'Command usage', body: ['No per-command counters recorded yet — they fill as commands run.'] })],
+    });
+  }
+  const total = counts.reduce((n, c) => n + c.count, 0);
+  await interaction.editReply({
+    flags: V2 | MessageFlags.Ephemeral,
+    components: [
+      card({
+        emoji: '📊',
+        title: `Command usage — ${total} total runs`,
+        body: [
+          kvTable(
+            counts.slice(0, 15).map((c) => [`/${c.name}`, `${c.count} (${Math.round((c.count / total) * 100)}%)`]),
+            { title: 'TOP COMMANDS' }
+          ),
+        ],
+      }),
+    ],
+  });
+}
+
+async function subPrune(interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const days = interaction.options.getInteger('days') ?? 30;
+  const n = await store.pruneLogs(days);
+  await interaction.editReply({
+    flags: V2 | MessageFlags.Ephemeral,
+    components: [
+      card({
+        emoji: '🧹',
+        title: n == null ? 'Database offline' : `Pruned ${n} log row(s)`,
+        body: [n == null ? 'Nothing was deleted — the database is unreachable.' : `Deleted bypass logs older than **${days}** day(s).`],
+      }),
+    ],
+  });
+}
+
+async function subConfig(interaction) {
+  const [maintenance, disabledCommands] = await Promise.all([
+    store.getConfig('maintenance', false),
+    store.getConfig('disabledCommands', []),
+  ]);
+  const overrides = store.cooldownOverrides();
+  await interaction.reply({
+    flags: V2 | MessageFlags.Ephemeral,
+    components: [
+      card({
+        emoji: '🎚️',
+        title: 'Live configuration',
+        body: [
+          kvTable(
+            [
+              ['maintenance', maintenance ? 'ON — bot paused for everyone but you' : 'off'],
+              ['disabled commands', disabledCommands.length ? disabledCommands.map((c) => `/${c}`).join(', ') : 'none'],
+              ['cooldown overrides', Object.keys(overrides).length ? Object.entries(overrides).map(([k, v]) => `${k}=${v}s`).join(', ') : 'none'],
+              ['auto-leave threshold', `${config.minGuildMembers}+ members`],
+              ['api key', config.apiKey ? 'configured' : 'MISSING — bypasses offline'],
+              ['dashboard', config.dashboardToken ? 'token set — /dashboard live' : 'not configured'],
+              ['database', dbHealthy() ? 'connected' : 'memory-only'],
+              ['version', `v${config.version}`],
+            ],
+            { title: 'FLAGS' }
+          ),
+        ],
+      }),
+    ],
+  });
 }

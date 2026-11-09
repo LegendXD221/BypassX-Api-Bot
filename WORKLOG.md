@@ -223,3 +223,62 @@ surface entirely, and ship v1.2.0.
 - Result cache (10 min TTL, 250 max) served locally before hitting the API.
 - Secret hygiene: `.env` gitignored, `.env.example` placeholder-only, no
   provider details anywhere in the public surface.
+
+## 2026-11-09 — v2.0.0: the power update (100+ commands · dashboard v2 · diff formats)
+
+- MESSAGE FORMATS: new `src/format.js` — the bot's format voice. ```diff blocks
+  (+ green / - red / ! orange / @@ cyan headers) are Discord's native status
+  renderer and now carry every result: bypass destinations land as a fat green
+  `+ https://…` line, errors as a red `-` line, batch reports as a full
+  diff ledger. `ansi` blocks power terminal-style status panels (gateway/api/
+  db/uptime rows colorized), `kvTable` renders aligned pipe tables, `bar`
+  renders ▰▱ meters, `codeBlock` escapes nested fences.
+- FORMAT SURFACES: result card (diff result block), error card (diff error
+  line), copy card (diff block = one-click copy), ping + status + uptime
+  (ansi panels), stats + me (bar meters + kvTables), /bx batch/multicheck,
+  suggest, privacy, shortcuts, changelog, help. The "/bypass" ack became a
+  diff-styled status line ("+ chain started").
+- 100+ COMMANDS: 40 top-level · **106 invokable actions** (verified by smoke).
+  * /bx suite — batch (5 links in one run, per-link diff report + link
+    buttons), key (explicit key-system runner), multicheck (5-link registry
+    verdict), last (re-run your previous link), suggest (direct-to-owner idea).
+  * /utility — encode/decode (base64/hex/url + auto), hash (4 algos), uuid,
+    password (crypto.randomBytes, ephemeral), timestamp (relative Discord
+    times), snowflake (ID decode), math (whitelisted evaluator), color
+    (hex→rgb/hsl/int), baseconvert.
+  * /fun — roll NdM, flip, eightball, choose (diff-styled elimination), rate
+    (▰▱ meter), love (deterministic sha256 pair score), rps, duel.
+  * /server (perm-gated) — purge (filters: user/bots/links, 14d-safe paging),
+    slowmode, lock/unlock (@everyone SendMessages), say, embed, announce
+    (channel + role ping), nick, topic, pin/unpin.
+  * /info — avatar, banner (fetch(true)), roleinfo, channelinfo, emojiinfo,
+    emojilist (grouped), roles, boosts, servericon.
+  * standalone — /leaderboard, /history (domain filter + rerun buttons),
+    /serviceinfo, /randomservice, /docs, /changelog, /privacy, /reminder
+    (DM timers), /poll (button votes, live ▰▱ tallies), /faq, /shortcuts,
+    /uptime, /tip, /commands (catalog by category).
+  * /owner +6 subs (23 total): sql (read-only guard), avatar, username,
+    cmdstats (per-command DB counters), prune, config (full flag dump).
+  * `src/commands/catalog.js` — one category registry feeding /commands +
+    /help; per-command usage counters (`cmd:<name>` in counters) feed the
+    dashboard and /owner cmdstats.
+- DASHBOARD v2 (owner console): brand-red BypassX identity, inline SVG favicon,
+  sidebar tabs (Overview · Guilds · Actions · Command usage · Logs &
+  feedback · Config), searchable action palette (filter input + group select +
+  chips) covering **57 actions** (+29 new: send_embed, dm_guild_owner,
+  fetch_message, guild_roles/emojis/invites/bans/members, member_info/kick/
+  ban/timeout, create/delete channel+role, set_status, reload_commands,
+  dump_env (names only, values redacted), sql_query (read-only), bypass_url
+  (run a bypass from the console!), feedback_list/clear, command_counts,
+  preview_diff). KPI grid (16 cards), per-command usage table with share bars,
+  quick toggles (maintenance/auto-bypass/status), sticky console drawer.
+  Danger zone extended to member/channel/role/feedback actions.
+- DANGER SET + CONFIRM: 12 danger actions now require confirm:true (was 6).
+- DB: new helpers — lastBypass, userHistory (domain ILIKE filter), topUsers,
+  commandCounts, rawQuery (owner read-only passthrough).
+- TESTS: smoke extended — format engine (diff shapes, fence escaping,
+  kvTable alignment, bar, ANSI), formats-reach-cards (result/error JSON
+  assertions), 40/106 command registry validation (unique names, invokables
+  >= 100), owner 23 subcommands, 57 dashboard actions + danger set, v2 UI
+  markers + every action id present in the palette, poll button router,
+  catalog categories. 16 check groups ALL GREEN.

@@ -23,6 +23,7 @@ import {
 } from '../components.js';
 import { takeToken } from '../tokens.js';
 import { PAGE_SIZE, filterServices } from '../commands/public/services.js';
+import { handlePollButton } from '../commands/public/poll.js';
 import { supported } from '../api.js';
 
 export async function handleButton(interaction) {
@@ -32,6 +33,7 @@ export async function handleButton(interaction) {
   if (id.startsWith('bxsvc:')) return handleServicesNav(interaction);
   if (id.startsWith('bxretry:')) return handleRetry(interaction);
   if (id.startsWith('bxoauth:')) return handleOauthButton(interaction);
+  if (id.startsWith('bxpoll:')) return handlePollButton(interaction);
 }
 
 /* ---------------- Mobile / PC copy ---------------- */

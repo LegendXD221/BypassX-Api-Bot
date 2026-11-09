@@ -14,11 +14,11 @@ export async function runBypass({ interaction, url, source = 'command', userId =
 
   await interaction.deferReply(hidden ? { flags: MessageFlags.Ephemeral } : undefined);
 
-  // Immediate acknowledgement — the deferred placeholder becomes
-  // "@user bypassing your link…" until the result replaces it.
+  // Immediate acknowledgement — the deferred placeholder becomes a
+  // diff-styled status line until the result replaces it.
   await interaction
     .editReply({
-      content: `<@${requester}> bypassing your link…`,
+      content: `<@${requester}> bypassing your link…\n\`\`\`diff\n+ chain started — working on it\n-# result lands in this message when the API answers\n\`\`\``,
       allowedMentions: { users: [requester] },
     })
     .catch(() => {});

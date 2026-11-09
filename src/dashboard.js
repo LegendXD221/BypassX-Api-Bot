@@ -3,10 +3,11 @@ import util from 'node:util';
 import { PermissionsBitField, ChannelType } from 'discord.js';
 import { config } from './config.js';
 import { store, dbHealthy } from './db.js';
-import { cacheClear, cacheStats, measureApi, refreshSupported, metrics } from './api.js';
+import { cacheClear, cacheStats, measureApi, refreshSupported, metrics, bypassUrl } from './api.js';
 import { apiHealth } from './watchdog.js';
 import { log } from './logger.js';
 import { dashboardHtml, dashboardLoginHtml } from './dashboard-page.js';
+import { diffBlock, codeBlock } from './format.js';
 
 /* ------------------------------------------------------------------ */
 /* Auth — timing-safe token compare, header (?Authorization: Bearer)   */
@@ -422,13 +423,303 @@ export const ACTIONS = {
     const m = await measureApi();
     return `API probe → ${m?.ok ? '✅ reachable' : '❌ failed'} · ${m?.latencyMs ?? '?'}ms${m?.status ? ` · HTTP ${m.status}` : ''}`;
   },
+
+  /* ═══════════════════ v2.0 additions ═══════════════════ */
+
+  /* ---------------- messaging ---------------- */
+
+  async send_embed({ channelId, json }, ctx) {
+    const client = needClient(ctx);
+    const ch = await client.channels.fetch(reqId(channelId, 'channelId'));
+    if (!ch?.send) throw new Error('channel not found or not text-based');
+    let payload;
+    try {
+      payload = JSON.parse(String(json ?? '{}'));
+    } catch {
+      throw new Error('embed JSON did not parse');
+    }
+    await ch.send({ embeds: [payload], allowedMentions: { parse: [] } });
+    return `embed delivered to **#${ch.name ?? channelId}**`;
+  },
+
+  async dm_guild_owner({ guildId, message }, ctx) {
+    const client = needClient(ctx);
+    const g = client.guilds.cache.get(reqId(guildId, 'guildId'));
+    if (!g) throw new Error('guild not found');
+    const owner = await g.fetchOwner();
+    await owner.send({ content: reqText(message, 'message') });
+    return `DM delivered to **${owner.user?.tag ?? owner.id}** (owner of **${g.name}**)`;
+  },
+
+  async fetch_message({ channelId, messageId }, ctx) {
+    const client = needClient(ctx);
+    const ch = await client.channels.fetch(reqId(channelId, 'channelId'));
+    const m = await ch?.messages?.fetch(reqId(messageId, 'messageId'));
+    if (!m) throw new Error('message not found');
+    return [
+      `**${m.author?.tag ?? '?'}** in **#${ch.name ?? channelId}** <t:${Math.floor(m.createdTimestamp / 1000)}:R>`,
+      codeBlock('', (m.content ?? '(no text content)').slice(0, 1500)),
+    ].join('\n');
+  },
+
+  /* ---------------- guilds ---------------- */
+
+  async guild_roles({ guildId }, ctx) {
+    const client = needClient(ctx);
+    const g = client.guilds.cache.get(reqId(guildId, 'guildId'));
+    if (!g) throw new Error('guild not found');
+    const lines = g.roles.cache
+      .sort((a, b) => b.position - a.position)
+      .first(30)
+      .map((r) => `\`${r.hexColor === '#000000' ? 'default ' : r.hexColor}\` **${r.name}** — ${r.members?.size ?? '?'} members`);
+    return `**${g.name}** — ${g.roles.cache.size} roles:\n${lines.join('\n')}`;
+  },
+
+  async guild_emojis({ guildId }, ctx) {
+    const client = needClient(ctx);
+    const g = client.guilds.cache.get(reqId(guildId, 'guildId'));
+    if (!g) throw new Error('guild not found');
+    const list = [...g.emojis.cache.values()].slice(0, 40).map((e) => `${e.animated ? '🎞️' : '🧩'} \`:${e.name}:\``);
+    return `**${g.name}** — ${g.emojis.cache.size} emojis:\n${list.join(' ') || 'none'}`;
+  },
+
+  async guild_invites({ guildId }, ctx) {
+    const client = needClient(ctx);
+    const g = client.guilds.cache.get(reqId(guildId, 'guildId'));
+    if (!g) throw new Error('guild not found');
+    const invites = await g.invites.fetch().catch(() => null);
+    if (!invites) return 'could not fetch invites (missing permission)';
+    return `**${g.name}** — ${invites.size} active invite(s):\n${invites
+      .first(20)
+      .map((i) => `\`${i.code}\` · #${i.channel?.name ?? '?'} · ${i.uses ?? 0}/${i.maxUses ?? '∞'} uses${i.expiresTimestamp ? ` · expires <t:${Math.floor(i.expiresTimestamp / 1000)}:R>` : ''}`)
+      .join('\n') || 'none'}`;
+  },
+
+  async guild_bans({ guildId }, ctx) {
+    const client = needClient(ctx);
+    const g = client.guilds.cache.get(reqId(guildId, 'guildId'));
+    if (!g) throw new Error('guild not found');
+    const bans = await g.bans.fetch().catch(() => null);
+    if (!bans) return 'could not fetch bans (missing permission)';
+    return `**${g.name}** — ${bans.size} ban(s):\n${bans
+      .first(30)
+      .map((b) => `👤 **${b.user?.tag ?? b.user?.id}**${b.reason ? ` — ${b.reason.slice(0, 80)}` : ''}`)
+      .join('\n') || 'none'}`;
+  },
+
+  async guild_members({ guildId, query = '' }, ctx) {
+    const client = needClient(ctx);
+    const g = client.guilds.cache.get(reqId(guildId, 'guildId'));
+    if (!g) throw new Error('guild not found');
+    await g.members.fetch().catch(() => {});
+    const term = String(query ?? '').toLowerCase();
+    const list = [...g.members.cache.values()]
+      .filter((m) => !term || m.user?.username?.toLowerCase().includes(term) || m.displayName?.toLowerCase().includes(term))
+      .sort((a, b) => (b.joinedTimestamp ?? 0) - (a.joinedTimestamp ?? 0))
+      .slice(0, 30)
+      .map((m) => `**${m.user?.tag ?? m.id}**${m.user?.bot ? ' 🤖' : ''} — joined <t:${Math.floor((m.joinedTimestamp ?? Date.now()) / 1000)}:R>`);
+    return `**${g.name}** — ${g.memberCount ?? g.members.cache.size} members${term ? ` matching “${term}”` : ''}:\n${list.join('\n') || 'none matched'}`;
+  },
+
+  async member_info({ guildId, userId }, ctx) {
+    const client = needClient(ctx);
+    const g = client.guilds.cache.get(reqId(guildId, 'guildId'));
+    if (!g) throw new Error('guild not found');
+    const m = await g.members.fetch(reqId(userId, 'userId')).catch(() => null);
+    if (!m) throw new Error('member not found in that guild');
+    const roles = m.roles.cache.filter((r) => r.id !== g.id).map((r) => r.name).slice(0, 20);
+    return [
+      `**${m.user?.tag}**${m.user?.bot ? ' 🤖' : ''} — \`${m.id}\``,
+      `joined <t:${Math.floor((m.joinedTimestamp ?? 0) / 1000)}:R> · nickname: ${m.nickname ?? '—'}`,
+      `roles (${m.roles.cache.size - 1}): ${roles.join(', ') || 'none'}`,
+      `avatar: ${m.displayAvatarURL({ size: 128 })}`,
+    ].join('\n');
+  },
+
+  async member_kick({ guildId, userId, reason }, ctx) {
+    const client = needClient(ctx);
+    const g = client.guilds.cache.get(reqId(guildId, 'guildId'));
+    if (!g) throw new Error('guild not found');
+    const m = await g.members.fetch(reqId(userId, 'userId')).catch(() => null);
+    if (!m) throw new Error('member not found');
+    await m.kick(reason ? reqText(reason, 'reason', 200) : undefined);
+    return `kicked **${m.user?.tag ?? userId}** from **${g.name}**`;
+  },
+
+  async member_ban({ guildId, userId, reason }, ctx) {
+    const client = needClient(ctx);
+    const g = client.guilds.cache.get(reqId(guildId, 'guildId'));
+    if (!g) throw new Error('guild not found');
+    const m = await g.members.fetch(reqId(userId, 'userId')).catch(() => null);
+    await g.members.ban(reqId(userId, 'userId'), { reason: reason ? reqText(reason, 'reason', 200) : 'banned via dashboard' });
+    return `banned **${m?.user?.tag ?? userId}** from **${g.name}**${reason ? ` — ${reason}` : ''}`;
+  },
+
+  async member_timeout({ guildId, userId, minutes }, ctx) {
+    const client = needClient(ctx);
+    const g = client.guilds.cache.get(reqId(guildId, 'guildId'));
+    if (!g) throw new Error('guild not found');
+    const m = await g.members.fetch(reqId(userId, 'userId')).catch(() => null);
+    if (!m) throw new Error('member not found');
+    const mins = Math.max(1, Math.min(40320, Number(minutes) || 10));
+    await m.timeout(mins * 60_000, 'timed out via dashboard');
+    return `timed out **${m.user?.tag ?? userId}** for **${mins} min** in **${g.name}**`;
+  },
+
+  async create_channel({ guildId, name, type }, ctx) {
+    const client = needClient(ctx);
+    const g = client.guilds.cache.get(reqId(guildId, 'guildId'));
+    if (!g) throw new Error('guild not found');
+    const kind = String(type ?? 'text').toLowerCase() === 'voice' ? ChannelType.GuildVoice : ChannelType.GuildText;
+    const ch = await g.channels.create({ name: reqText(name, 'name', 90), type: kind });
+    return `created ${kind === ChannelType.GuildVoice ? 'voice' : 'text'} channel **#${ch.name}** in **${g.name}**`;
+  },
+
+  async delete_channel({ channelId }, ctx) {
+    const client = needClient(ctx);
+    const ch = await client.channels.fetch(reqId(channelId, 'channelId'));
+    const name = ch?.name ?? channelId;
+    await ch?.delete('deleted via owner dashboard');
+    return `deleted channel **#${name}** (${channelId})`;
+  },
+
+  async create_role({ guildId, name, color }, ctx) {
+    const client = needClient(ctx);
+    const g = client.guilds.cache.get(reqId(guildId, 'guildId'));
+    if (!g) throw new Error('guild not found');
+    const data = { name: reqText(name, 'name', 90) };
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(color ?? '').trim());
+    if (m) data.color = parseInt(m[1], 16);
+    const role = await g.roles.create(data);
+    return `created role **${role.name}** in **${g.name}**${color ? ` (${color})` : ''}`;
+  },
+
+  async delete_role({ guildId, roleId }, ctx) {
+    const client = needClient(ctx);
+    const g = client.guilds.cache.get(reqId(guildId, 'guildId'));
+    if (!g) throw new Error('guild not found');
+    const role = g.roles.cache.get(reqId(roleId, 'roleId'));
+    if (!role) throw new Error('role not found');
+    const name = role.name;
+    await role.delete('deleted via owner dashboard');
+    return `deleted role **${name}** from **${g.name}**`;
+  },
+
+  /* ---------------- bot control ---------------- */
+
+  async set_status({ status }, ctx) {
+    const client = needClient(ctx);
+    const map = { online: 'online', idle: 'idle', dnd: 'dnd', invisible: 'invisible' };
+    const s = map[String(status ?? 'online').toLowerCase()];
+    if (!s) throw new Error('status must be online/idle/dnd/invisible');
+    client.user.setStatus(s);
+    return `status → **${s}**`;
+  },
+
+  async reload_commands(args, ctx) {
+    const client = needClient(ctx);
+    const { commandData } = await import('./commands/index.js');
+    await client.application.commands.set(commandData);
+    return `re-registered **${commandData.length}** global slash commands (guild-level sync happens on the gateway too)`;
+  },
+
+  async dump_env() {
+    const names = Object.keys(process.env)
+      .filter((k) => /DISCORD|CLIENT|OWNER|BX_|DATABASE|MIN_GUILD|DASHBOARD|NODE_ENV|RENDER/i.test(k))
+      .sort();
+    return codeBlock('ml', names.map((n) => `${n}=${n.endsWith('TOKEN') || n.includes('KEY') || n.includes('DATABASE') ? '<redacted>' : 'set'}`).join('\n'));
+  },
+
+  /* ---------------- data & api ---------------- */
+
+  async sql_query({ query }) {
+    const sql = String(query ?? '').trim();
+    if (!/^(select|with|show|explain|table)\b/i.test(sql) || /;.*(insert|update|delete|drop|alter|truncate|create)/i.test(sql)) {
+      throw new Error('read-only enforced — only SELECT/WITH/SHOW/EXPLAIN/TABLE');
+    }
+    const res = await store.rawQuery(sql);
+    const rows = res?.rows ?? [];
+    return codeBlock('json', JSON.stringify(rows, null, 1).slice(0, 1800) || '[]');
+  },
+
+  async bypass_url({ url }, ctx) {
+    const result = await bypassUrl(String(url ?? '').trim());
+    if (result.kind === 'oauth') {
+      return `⚠️ **${result.serviceName ?? 'key system'}** paused for a sign-in — run it in Discord with /bypass for the interactive handoff.`;
+    }
+    return [
+      `**${result.serviceName ?? 'bypassed'}**${result.elapsedMs ? ` · ${(result.elapsedMs / 1000).toFixed(1)}s` : ''}${result.cached ? ' · cached' : ''}`,
+      diffBlock({ add: [result.url] }),
+    ].join('\n');
+  },
+
+  async feedback_list() {
+    const rows = await store.recentFeedback(15);
+    if (!rows.length) return 'no feedback yet';
+    return rows
+      .map((r) => `📝 **${r.from ?? '?'}**${r.guild ? ` · ${r.guild}` : ''}\n> ${(r.message ?? '').slice(0, 160)}`)
+      .join('\n\n');
+  },
+
+  async feedback_clear() {
+    await store.setConfig('feedback', []);
+    return 'feedback inbox cleared (last 50 kept in DB history — this resets the active inbox)';
+  },
+
+  async command_counts() {
+    const counts = await store.commandCounts();
+    if (!counts.length) return 'no per-command counters recorded yet — they fill as commands run';
+    const total = counts.reduce((n, c) => n + c.count, 0);
+    return codeBlock(
+      'ml',
+      counts.slice(0, 25).map((c) => `/${c.name}`.padEnd(24) + String(c.count).padStart(6) + `  (${Math.round((c.count / total) * 100)}%)`).join('\n') + `\n${'—'.repeat(30)}\n${'total'.padEnd(24)}` + String(total).padStart(6)
+    );
+  },
+
+  /* ---------------- format preview ---------------- */
+
+  async preview_diff({ channelId }, ctx) {
+    const client = needClient(ctx);
+    const ch = await client.channels.fetch(reqId(channelId, 'channelId'));
+    if (!ch?.send) throw new Error('channel not found or not text-based');
+    const { V2 } = await import('./components.js');
+    const { card } = await import('./components.js');
+    await ch.send({
+      flags: V2,
+      components: [
+        card({
+          emoji: '🎨',
+          title: 'Format preview',
+          body: [
+            diffBlock({ info: ['live formats'], add: ['boostylink fixed', 'every result lands like this'], del: ['failures render red'], warn: ['warnings render orange'] }),
+            statusPanel([['gateway', 'connected', 'ok'], ['formats', 'diff · ansi · json · ml', 'info']], { title: 'PREVIEW' }),
+          ],
+        }),
+      ],
+      allowedMentions: { parse: [] },
+    });
+    return `format preview delivered to **#${ch.name ?? channelId}** — check it in Discord`;
+  },
 };
 
 export function actionNames() {
   return Object.keys(ACTIONS);
 }
 
-const DANGER = new Set(['shutdown', 'leave_guild', 'stats_reset', 'prune_logs', 'eval_js', 'run_autoleave']);
+export const DANGER = new Set([
+  'shutdown',
+  'leave_guild',
+  'stats_reset',
+  'prune_logs',
+  'eval_js',
+  'run_autoleave',
+  'member_kick',
+  'member_ban',
+  'member_timeout',
+  'delete_channel',
+  'delete_role',
+  'feedback_clear',
+]);
 
 async function dispatch(body, ctx) {
   const name = String(body?.action ?? '');
@@ -466,7 +757,10 @@ export async function handleDashboard(req, res, url, ctx) {
     if (!authed) return sendJson(res, 401, { ok: false, error: 'unauthorized — valid DASHBOARD_TOKEN required' });
 
     if (path === '/dashboard/api/overview' && req.method === 'GET') {
-      return sendJson(res, 200, await buildOverview(ctx));
+      const overview = await buildOverview(ctx);
+      overview.commands = await store.commandCounts().catch(() => []);
+      overview.actions = Object.keys(ACTIONS);
+      return sendJson(res, 200, overview);
     }
 
     if (path === '/dashboard/api/action' && req.method === 'POST') {

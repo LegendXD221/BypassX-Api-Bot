@@ -414,6 +414,46 @@ export const store = {
     return res ? res.rows : [];
   },
 
+  /** The most recent log row for a user (any outcome) — powers /bx last. */
+  async lastBypass(userId) {
+    const res = await q('SELECT * FROM bypass_logs WHERE user_id=$1 ORDER BY id DESC LIMIT 1', [userId]);
+    return res?.rows?.[0] ?? null;
+  },
+
+  /** Personal history with optional domain filter — powers /history. */
+  async userHistory(userId, { domain = null, limit = 10 } = {}) {
+    const cap = Math.min(Math.max(1, limit), 20);
+    const res = domain
+      ? await q('SELECT * FROM bypass_logs WHERE user_id=$1 AND domain ILIKE $2 ORDER BY id DESC LIMIT $3', [userId, `%${domain}%`, cap])
+      : await q('SELECT * FROM bypass_logs WHERE user_id=$1 ORDER BY id DESC LIMIT $2', [userId, cap]);
+    return res ? res.rows : [];
+  },
+
+  /** Top users by successful bypasses — powers /leaderboard (IDs only; the command resolves names). */
+  async topUsers(limit = 10) {
+    const cap = Math.min(Math.max(1, limit), 20);
+    const res = await q(
+      `SELECT user_id, COUNT(*)::int AS n FROM bypass_logs
+       WHERE success AND user_id IS NOT NULL
+       GROUP BY user_id ORDER BY n DESC LIMIT $1`,
+      [cap]
+    );
+    return res ? res.rows : [];
+  },
+
+  /** Per-command usage counters (keys look like cmd:<name>) — dashboard + /commands. */
+  async commandCounts() {
+    const res = await q("SELECT key, value FROM counters WHERE key LIKE 'cmd:%' ORDER BY value DESC LIMIT 100");
+    return res
+      ? res.rows.map((r) => ({ name: String(r.key).slice('cmd:'.length), count: Number(r.value) || 0 }))
+      : [];
+  },
+
+  /** Owner-only raw query passthrough (/owner sql + dashboard sql_query). */
+  async rawQuery(text) {
+    return q(text);
+  },
+
   /** Aggregated stats for /stats and /owner stats — null fields when DB is off. */
   async publicStats() {
     if (!dbOk) return null;

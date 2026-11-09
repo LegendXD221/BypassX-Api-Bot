@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { store } from '../../db.js';
 import { V2, card } from '../../components.js';
+import { bar, diffBlock } from '../../format.js';
 
 /** Personal, privacy-friendly usage stats for the requesting user. */
 export default {
@@ -14,9 +15,11 @@ export default {
 
     const body = stats
       ? [
-          `**Lifetime**\n${stats.total} bypass${stats.total === 1 ? '' : 'es'} · ${stats.successRate}% success`,
+          `**Lifetime** ${bar(stats.successRate)}\n${stats.total} bypass${stats.total === 1 ? '' : 'es'} · ${stats.successRate}% success`,
           `**Recent**\n${stats.last24h} in the last 24 hours · ${stats.last7d} in the last 7 days`,
-          `**Favourite service**\n${stats.favorite ? `\`${stats.favorite}\`` : 'No successful bypasses yet.'}`,
+          stats.favorite
+            ? diffBlock({ info: ['favourite service'], add: [stats.favorite], max: 300 })
+            : null,
           `-# Run \`/bypass url:\` or right-click a message → **Bypass Link** to add to this.`,
         ]
       : [

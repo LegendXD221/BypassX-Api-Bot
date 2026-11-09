@@ -27,9 +27,19 @@
   a rerun usually picks up where the previous attempt stopped
 - 🙌 **Guided OAuth handoff** — when Delta demands a one-time sign-in, the bot renders the
   sign-in button and a modal to paste the redirect URL, then resumes the chain automatically
-- 🧰 **Full toolkit** — `/check` (instant “is this supported?”), `/recent` (rerun past bypasses
-  with one tap), `/status` (system health), `/me`, `/serverinfo`, `/userinfo`, `/botinfo`,
-  `/website`, `/feedback`
+- 🧰 **100+ commands (106 invokable actions across 40 top-level commands)** —
+  the bypass core (`/bypass`, `/bx batch` ×5 links, `/bx key`, `/bx multicheck`,
+  `/bx last`, right-click **Bypass Link**, `/check`, `/recent`, `/history` with reruns),
+  a dev pocket-knife (`/utility`: encode/decode/hash/uuid/password/timestamp/
+  snowflake/math/color/baseconvert), party tricks (`/fun`), perm-gated server
+  tools (`/server`: purge/lock/slowmode/announce/embed/pin…), lookups (`/info`),
+  community surfaces (`/leaderboard`, `/poll`, `/reminder`, `/faq`, `/privacy`,
+  `/changelog`, `/tip`, `/commands`) and a 23-subcommand owner suite
+  (`/owner`: eval, sql, cmdstats, config, avatar, broadcast…)
+- ✍️ **diff/ansi message formats** — results land in green `+` diff blocks,
+  failures in red `-`, status panels in ANSI — plus JSON dumps and aligned
+  pipe tables everywhere
+- 🗳️ **Button polls** with live vote bars, ⏰ DM reminders, 🏆 leaderboards
 - 🛡️ **Self-healing runtime** — API calls retry transient failures with backoff, an independent
   watchdog probes the BypassX API every 5 minutes, the gateway logs disconnect/resume events,
   and login retries network hiccups before giving up

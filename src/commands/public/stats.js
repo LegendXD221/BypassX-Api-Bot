@@ -3,7 +3,8 @@ import { config } from '../../config.js';
 import { refreshSupported, supported, metrics } from '../../api.js';
 import { formatUptime } from '../../util.js';
 import { store } from '../../db.js';
-import { V2, card } from '../../components.js';
+import { V2, card, statusPanel } from '../../components.js';
+import { bar, kvTable } from '../../format.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -18,9 +19,25 @@ export default {
     const ageMin = supported.fetchedAt ? Math.round((Date.now() - supported.fetchedAt) / 60000) : null;
     const servers = interaction.client.guilds.cache.size;
 
+    const total = (c.bypasses ?? 0) + (c.failures ?? 0);
+    const rate = total ? Math.round(((c.bypasses ?? 0) / total) * 100) : null;
+
     const body = [
-      `**Runtime**\nUptime ${formatUptime(process.uptime())} · ${servers} server${servers === 1 ? '' : 's'} · v${config.version}`,
-      `**Bypasses**\n${c.bypasses ?? 0} total · ${c.autoBypasses ?? 0} auto-bypassed · ${metrics.cacheHits} served from cache`,
+      statusPanel(
+        [
+          ['uptime', formatUptime(process.uptime()), 'info'],
+          ['servers', `${servers}`, 'info'],
+          ['bypasses', `${c.bypasses ?? 0}`, 'ok'],
+          ['auto-bypasses', `${c.autoBypasses ?? 0}`, 'ok'],
+          ['cache hits', `${metrics.cacheHits}`, 'info'],
+          ['api', `${supported.count || '—'} services`, 'info'],
+          ['version', `v${config.version}`, 'info'],
+        ],
+        { title: 'LIVE NUMBERS' }
+      ),
+      rate != null
+        ? `**Success rate** ${bar(rate)}\n-# ${c.bypasses ?? 0} of ${total} attempts landed`
+        : null,
     ];
 
     if (db) {
@@ -28,7 +45,12 @@ export default {
         `**Quality**\n${db.successRate}% success rate · ${db.last24h} bypasses in the last 24h · ${db.users} unique user(s)`
       );
       if (db.topDomains.length) {
-        body.push(`**Most bypassed (30d)**\n${db.topDomains.map((d) => `> \`${d.domain}\` — ${d.n}`).join('\n')}`);
+        body.push(
+          kvTable(
+            db.topDomains.map((d) => [d.domain, `${d.n} bypasses`]),
+            { title: 'MOST BYPASSED (30d)' }
+          )
+        );
       }
     }
 

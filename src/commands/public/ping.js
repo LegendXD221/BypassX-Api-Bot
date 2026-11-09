@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { measureApi } from '../../api.js';
 import { formatUptime } from '../../util.js';
-import { V2, card } from '../../components.js';
+import { V2, card, statusPanel } from '../../components.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -25,8 +25,14 @@ export default {
           title: 'Pong',
           subtitle: `gateway ${gateway} · uptime ${formatUptime(process.uptime())}`,
           body: [
-            `**BypassX API** ${api.ok ? `✅ ${api.ms} ms (HTTP ${api.status})` : `❌ unreachable after ${api.ms} ms`}`,
-            `**Roundtrip** ${roundtrip} ms`,
+            statusPanel(
+              [
+                ['gateway', `${gateway}`, 'info'],
+                ['roundtrip', `${roundtrip} ms`, 'info'],
+                ['bypassx api', api.ok ? `up · ${api.ms} ms (HTTP ${api.status})` : `unreachable after ${api.ms} ms`, api.ok ? 'ok' : 'err'],
+              ],
+              { title: 'LATENCY' }
+            ),
           ],
         }),
       ],

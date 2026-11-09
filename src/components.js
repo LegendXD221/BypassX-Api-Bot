@@ -9,6 +9,7 @@ import {
 import { config } from './config.js';
 import { truncate, formatRate } from './util.js';
 import { issueToken } from './tokens.js';
+import { diffBlock, codeBlock, cut, ansi, ansiBlock } from './format.js';
 
 /** Flag that switches a message over to Components V2. */
 export const V2 = MessageFlags.IsComponentsV2;
@@ -131,11 +132,15 @@ export function resultContainer({ sourceUrl, result, auto = false }) {
   c.addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small).setDivider(true));
   c.addSectionComponents((s) =>
     s
-      .addTextDisplayComponents(
-        (t) => t.setContent(`**Source**\n${truncate(sourceUrl, 100)}`),
-        (t) => t.setContent(`**${isLink ? 'Result' : 'Key'}**\n${truncate(result.url, 300)}`)
-      )
+      .addTextDisplayComponents((t) => t.setContent(`**Source**\n${truncate(sourceUrl, 100)}`))
       .setThumbnailAccessory((th) => th.setURL(thumb).setDescription('Destination site icon'))
+  );
+  // The result itself in a ```diff block — a fat green + line, impossible
+  // to miss and identical on desktop and mobile.
+  c.addTextDisplayComponents((t) =>
+    t.setContent(
+      `**${isLink ? 'Result' : 'Key'}**\n${diffBlock({ add: [cut(result.url, 380)] })}`
+    )
   );
   if (result.note) {
     c.addTextDisplayComponents((t) => t.setContent(`-# ${truncate(result.note, 220)}`));
@@ -204,11 +209,16 @@ export function errorContainer({ title = 'Something went wrong', description, re
       )
     );
   }
+  // Error detail inside a ```diff block — a red `-` line reads as failure
+  // even when the user never reads a word of prose.
+  const detail = description
+    ? `${description}\n\n${diffBlock({ del: [cut(String(description).replace(/\*\*/g, ''), 260)] })}`
+    : null;
   return card({
     accent: config.colors.error,
     emoji: '⚠️',
     title,
-    body: [description],
+    body: [detail],
     rows,
   });
 }
@@ -217,10 +227,10 @@ export function errorContainer({ title = 'Something went wrong', description, re
 /* Copy ephemerals                                                     */
 /* ------------------------------------------------------------------ */
 
-/** Mobile → plain text (long-press to copy) · PC → code block (one-click copy). */
+/** Mobile → plain text (long-press to copy) · PC → diff block (one-click copy). */
 export function copyContainer({ url, mode }) {
   const isMobile = mode === 'm';
-  const body = isMobile ? String(url) : `\`${url}\``;
+  const body = isMobile ? String(url) : diffBlock({ add: [cut(String(url), 800)] });
   const c = new ContainerBuilder().setAccentColor(config.colors.primary);
   c.addTextDisplayComponents((t) =>
     t.setContent(
@@ -279,9 +289,40 @@ export function broadcastContainer({ message, requesterTag }) {
     accent: config.colors.primary,
     emoji: '📣',
     title: 'Owner Broadcast',
-    body: [message],
+    body: [
+      message,
+      diffBlock({ add: ['message delivered by the owner'], max: 400 }),
+    ],
     footerText: `sent by ${requesterTag}`,
   });
+}
+
+/* ------------------------------------------------------------------ */
+/* Live status panel — the ```ansi heartbeat                            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Terminal-style status panel. Rows are [label, value, tone] where tone is
+ * 'ok' | 'warn' | 'err' | 'info' — colors come straight from the ANSI set
+ * Discord highlights natively.
+ */
+export function statusPanel(rows, { title = 'SYSTEM STATUS' } = {}) {
+  const tones = {
+    ok: (v) => ansi.green(v),
+    warn: (v) => ansi.yellow(v),
+    err: (v) => ansi.red(v),
+    info: (v) => ansi.cyan(v),
+  };
+  const width = Math.max(0, ...rows.map(([k]) => String(k).length));
+  const lines = [
+    ansi.bold(`┌─ ${title} ${'─'.repeat(Math.max(0, 26 - title.length))}`),
+    ...rows.map(([k, v, tone = 'info']) => {
+      const paint = tones[tone] ?? tones.info;
+      return `│ ${String(k).padEnd(width)} ${paint(String(v))}`;
+    }),
+    ansi.bold(`└${'─'.repeat(width + 24)}`),
+  ];
+  return ansiBlock(lines);
 }
 
 /* ------------------------------------------------------------------ */

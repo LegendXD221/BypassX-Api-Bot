@@ -17,6 +17,25 @@ import me from './public/me.js';
 import website from './public/website.js';
 import status from './public/status.js';
 import recent from './public/recent.js';
+import leaderboard from './public/leaderboard.js';
+import history from './public/history.js';
+import serviceinfo from './public/serviceinfo.js';
+import randomservice from './public/randomservice.js';
+import docs from './public/docs.js';
+import changelog from './public/changelog.js';
+import privacy from './public/privacy.js';
+import reminder from './public/reminder.js';
+import poll from './public/poll.js';
+import faq from './public/faq.js';
+import shortcuts from './public/shortcuts.js';
+import uptime from './public/uptime.js';
+import tip from './public/tip.js';
+import commandsCatalog from './public/commands.js';
+import bx from './suites/bx.js';
+import utility from './suites/utility.js';
+import fun from './suites/fun.js';
+import server from './suites/server.js';
+import info from './suites/info.js';
 import enableAutobypass from './owner/enable-autobypass.js';
 import disableAutobypass from './owner/disable-autobypass.js';
 import owner from './owner/owner.js';
@@ -25,22 +44,41 @@ const commands = new Collection();
 for (const cmd of [
   bypass,
   bypassLink,
-  services,
-  stats,
-  ping,
-  help,
-  invite,
-  support,
-  autobypass,
+  bx,
   check,
-  feedback,
+  services,
+  serviceinfo,
+  randomservice,
+  recent,
+  history,
+  leaderboard,
+  stats,
+  status,
+  uptime,
+  ping,
+  me,
   userinfo,
   botinfo,
   serverinfo,
-  me,
+  info,
+  utility,
+  fun,
+  server,
+  reminder,
+  poll,
+  commandsCatalog,
+  shortcuts,
+  tip,
+  faq,
+  docs,
+  changelog,
+  privacy,
+  help,
+  invite,
+  support,
   website,
-  status,
-  recent,
+  feedback,
+  autobypass,
   enableAutobypass,
   disableAutobypass,
   owner,
