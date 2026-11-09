@@ -4,6 +4,48 @@ Honest running log of decisions, changes and incidents. Newest first.
 
 ---
 
+## 2026-11-09 — v3 catalog: 100+ invokable actions + dashboard v3
+
+- ASK: "Make The Bot Dashboard Look More Good And Add Extremely Powerfull
+  commands i want like 100+" + "make the bot message support this msg format
+  and more formats ```diff …```".
+- COMMANDS: 42 top-level / 132 invokable (was 40/85-ish). Two new suites:
+  - `/tools` (10 subs): ip (ip-api.com), dns (dns.google), headers,
+    urlstatus, unshort (redirect-chain tracer), json, regex, jwt (decode +
+    expiry verdict, no verify), qr (qrserver.com image via MediaGallery),
+    cron (Vixie-cron parser + next 3 runs, dom/dow OR rule, UTC).
+  - `/text` (11 subs): case (9 styles), reverse (grapheme-safe), wc, sort
+    (5 modes), dedupe, mock, binary ↔, morse ↔, caesar (+rot0/rot13 table),
+    leet (classic/hardcore), charinfo (codepoint/utf8/entity).
+  - `/bx` grew: chain (auto-hops gated→gated up to 3, oauth pause mid-chain,
+    honest broke-report), export (last 10 as JSON, ephemeral), cacheinfo
+    (stats + per-URL cached verdict). cacheStats() now returns
+    { size, ttlMs, hits } — additive, dashboard still fine.
+- REGISTRATION: suites wired into commands/index.js + catalog assignment
+  (tools/text → utility). Global registration stays automatic on ready
+  (`client.application.commands.set`), 42 < 100 global limit.
+- DASHBOARD v3: inline-SVG bolt crest (sidebar + login, no external assets),
+  hero strip "BypassX Mission Control" with live KPIs (invokables/guilds/
+  bypasses/uptime — id-guarded singleton so auto-refresh can't duplicate),
+  stat cards show "42 top · 132 invokable", botline shows both counts,
+  polish: custom scrollbar, ::selection, stat hover lift, row hover,
+  canonical domain bypassx.de5.net in footer. Fixed pre-existing bug: stat
+  values containing `<small>` rendered as literal text (statCard now renders
+  our own markup when the value carries `<small>`).
+- FORMAT VOICE: all new commands speak diff/ansi/kvTable natively; audited
+  every public command — ping/uptime already used statusPanel, bypass/result/
+  error/copy containers already diff-styled. Nothing plain left on core paths.
+- TESTS: smoke.js updated (42 commands, +tools/+text roster, invokables ≥130,
+  dashboard v3 markers) — 16 groups PASS. New harnesses:
+  scripts/test-new-suites.mjs (25 checks, all pure-compute subs incl. live
+  dns/urlstatus) and scripts/test-tools-live.mjs (ip/headers/unshort/qr
+  live, 4/4). Harness caught a real cron bug (numeric ranges broke on named
+  fields; months off-by-one) — parseField rewritten, jan=1…dec=12 +
+  sun=0…sat=6 with 7→0 folding, bounds-checked. scripts/test-bx-offline.mjs
+  covers cacheinfo/export paths (3/3).
+
+---
+
 ## 2026-11-08 — v1.3.0 "Mobile raw copy + reliability + /status & /recent"
 
 - ASK: "Mobile Copy button should only give the raw result and nothing else —

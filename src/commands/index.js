@@ -36,6 +36,8 @@ import utility from './suites/utility.js';
 import fun from './suites/fun.js';
 import server from './suites/server.js';
 import info from './suites/info.js';
+import tools from './suites/tools.js';
+import text from './suites/text.js';
 import enableAutobypass from './owner/enable-autobypass.js';
 import disableAutobypass from './owner/disable-autobypass.js';
 import owner from './owner/owner.js';
@@ -62,6 +64,8 @@ for (const cmd of [
   serverinfo,
   info,
   utility,
+  tools,
+  text,
   fun,
   server,
   reminder,

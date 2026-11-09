@@ -243,7 +243,7 @@ export function cacheClear() {
 }
 
 export function cacheStats() {
-  return { size: cache.size };
+  return { size: cache.size, ttlMs: CACHE_TTL_MS, hits: metrics.cacheHits };
 }
 
 /* ------------------------------------------------------------------ */

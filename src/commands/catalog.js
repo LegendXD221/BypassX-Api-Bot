@@ -18,7 +18,7 @@ export const CATEGORY_META = {
 const ASSIGNMENT = {
   bypass: ['bypass', 'bx', 'check', 'bypass-link'],
   info: ['services', 'serviceinfo', 'randomservice', 'stats', 'status', 'me', 'recent', 'history', 'leaderboard', 'userinfo', 'serverinfo', 'botinfo'],
-  utility: ['utility', 'reminder', 'poll', 'commands', 'shortcuts'],
+  utility: ['utility', 'tools', 'text', 'reminder', 'poll', 'commands', 'shortcuts'],
   fun: ['fun'],
   server: ['server', 'autobypass', 'enable-autobypass', 'disable-autobypass'],
   meta: ['help', 'invite', 'support', 'website', 'docs', 'faq', 'privacy', 'changelog', 'tip', 'uptime', 'ping'],
@@ -45,6 +45,7 @@ export function categorize(commands) {
 
 /** Total invokable actions: top-level commands + subcommands + context menus. */
 export function countInvokables(commands) {
+  if (!commands || typeof commands.values !== 'function') return 0;
   let n = 0;
   for (const cmd of commands.values()) {
     const subs = cmd.data.options?.filter((o) => o.toJSON && o.name) ?? [];

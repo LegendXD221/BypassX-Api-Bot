@@ -16,6 +16,11 @@ const CSS = `
 --ind:#818cf8;--mono:ui-monospace,SFMono-Regular,Menlo,monospace;--rad:14px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--txt);font:14px/1.55 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;min-height:100vh}
+::selection{background:rgba(239,43,43,.35)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.13);border-radius:99px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:rgba(239,43,43,.45);background-clip:content-box}
 a{color:var(--acc2);text-decoration:none}
 .aurora{position:fixed;inset:0;z-index:-1;overflow:hidden}
 .aurora i{position:absolute;border-radius:50%;filter:blur(130px);opacity:.14}
@@ -28,8 +33,9 @@ a{color:var(--acc2);text-decoration:none}
 .side{width:218px;flex-shrink:0;position:sticky;top:0;height:100vh;display:flex;flex-direction:column;
 border-right:1px solid var(--line);background:rgba(10,8,12,.6);backdrop-filter:blur(14px)}
 .side .brand{display:flex;align-items:center;gap:10px;padding:20px 16px 14px}
-.side .brand .bolt{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;font-size:19px;flex-shrink:0;
-background:linear-gradient(135deg,rgba(239,43,43,.35),rgba(139,92,246,.3));border:1px solid rgba(239,43,43,.4);color:#fff}
+.side .brand .bolt{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex-shrink:0;overflow:hidden;
+background:linear-gradient(135deg,#ef2b2b,#8b1020);border:1px solid rgba(239,43,43,.55);box-shadow:0 4px 18px rgba(239,43,43,.35),inset 0 1px 0 rgba(255,255,255,.25)}
+.side .brand .bolt svg{width:24px;height:24px;display:block}
 .side .brand h1{font-size:15.5px;font-weight:700;letter-spacing:.2px}
 .side .brand h1 span{color:var(--mut);font-weight:500;font-size:11px;display:block}
 nav{padding:8px 10px;display:flex;flex-direction:column;gap:2px}
@@ -60,9 +66,24 @@ section.tab.on{display:block}
 h2.sec{font-size:12.5px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:1.4px;margin:26px 0 12px;display:flex;align-items:center;gap:8px}
 h2.sec:first-child{margin-top:0}
 
+/* ---------- hero strip (v3) ---------- */
+.hero{display:flex;align-items:center;gap:18px;flex-wrap:wrap;border:1px solid var(--line);border-radius:18px;padding:18px 22px;margin-bottom:14px;
+background:linear-gradient(120deg,rgba(239,43,43,.14),rgba(139,92,246,.08) 55%,transparent),var(--panel);position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(600px 180px at 12% -40%,rgba(239,43,43,.22),transparent);pointer-events:none}
+.hero .crest{width:54px;height:54px;border-radius:15px;display:grid;place-items:center;flex-shrink:0;
+background:linear-gradient(135deg,#ef2b2b,#8b1020);border:1px solid rgba(239,43,43,.55);box-shadow:0 6px 24px rgba(239,43,43,.4),inset 0 1px 0 rgba(255,255,255,.3)}
+.hero .crest svg{width:32px;height:32px}
+.hero h2{font-size:19px;font-weight:800;letter-spacing:.2px}
+.hero p{font-size:12.5px;color:var(--mut);margin-top:2px}
+.hero .kpis{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.hero .kpi{border:1px solid var(--line);border-radius:12px;padding:8px 14px;background:rgba(0,0,0,.3);text-align:center}
+.hero .kpi b{display:block;font-size:17px;color:var(--acc2)}
+.hero .kpi span{font-size:10.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.8px}
+
 /* ---------- stats ---------- */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:10px}
-.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--rad);padding:14px 16px;position:relative;overflow:hidden}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:var(--rad);padding:14px 16px;position:relative;overflow:hidden;transition:transform .18s,border-color .18s,box-shadow .18s}
+.stat:hover{transform:translateY(-2px);border-color:rgba(239,43,43,.35);box-shadow:0 10px 30px rgba(239,43,43,.12)}
 .stat::after{content:'';position:absolute;inset:0;border-radius:var(--rad);background:linear-gradient(135deg,rgba(239,43,43,.06),transparent 55%);pointer-events:none}
 .stat .k{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.9px}
 .stat .v{font-size:22px;font-weight:700;margin-top:4px}
@@ -76,6 +97,8 @@ h2.sec:first-child{margin-top:0}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{color:var(--mut);font-weight:600;text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);font-size:11.5px;text-transform:uppercase;letter-spacing:.7px}
 td{padding:8px 10px;border-bottom:1px solid rgba(255,255,255,.05);vertical-align:middle}
+tbody tr{transition:background .12s}
+tbody tr:hover{background:rgba(255,255,255,.035)}
 tr:last-child td{border-bottom:none}
 td img.av{width:26px;height:26px;border-radius:8px;vertical-align:middle}
 .mono{font-family:var(--mono);font-size:12px;color:var(--mut)}
@@ -124,8 +147,8 @@ background:rgba(8,6,10,.92);backdrop-filter:blur(16px);transform:translateY(calc
 /* ---------- login ---------- */
 .login{max-width:390px;margin:15vh auto 0;text-align:center}
 .login .card{padding:34px}
-.login .bolt{width:46px;height:46px;margin:0 auto 10px;border-radius:13px;display:grid;place-items:center;font-size:23px;
-background:linear-gradient(135deg,rgba(239,43,43,.35),rgba(139,92,246,.3));border:1px solid rgba(239,43,43,.4)}
+.login .bolt{width:46px;height:46px;margin:0 auto 10px;border-radius:13px;display:grid;place-items:center;overflow:hidden;
+background:linear-gradient(135deg,#ef2b2b,#8b1020);border:1px solid rgba(239,43,43,.55);box-shadow:0 6px 24px rgba(239,43,43,.4)}
 .login h1{font-size:17px;margin-bottom:4px}
 .login input{width:100%;margin:16px 0 12px}
 .login button{width:100%}
@@ -298,6 +321,9 @@ function buildPalette(){
   $('#actCount').textContent = shown + ' of ' + GROUPS.reduce(function(n,g){return n+g.acts.length},0) + ' actions';
 }
 
+/* ---- shared inline SVG crest (no external assets — works offline) ---- */
+var CREST = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M37 4 L13 37 h13.5 L21 60 L51 26 H34.5 Z" fill="#fff"/><path d="M37 4 L13 37 h13.5 L21 60 L51 26 H34.5 Z" fill="none" stroke="rgba(0,0,0,.18)" stroke-width="1.5"/></svg>';
+
 /* ---- overview ---- */
 function statCard(k,v,cls){
   var d=el('div','stat'+(cls?' '+cls:''));
@@ -305,6 +331,7 @@ function statCard(k,v,cls){
   d.appendChild(el('div','v'));
   if(typeof v === 'object' && v.html != null) d.lastChild.innerHTML=v.html;
   else if(typeof v === 'object' && v.node) d.lastChild.appendChild(v.node);
+  else if(typeof v === 'string' && v.indexOf('<small>') !== -1) d.lastChild.innerHTML=v; // our own markup — safe
   else d.lastChild.textContent = esc(v);
   return d;
 }
@@ -313,6 +340,20 @@ function renderStats(o){
   var rate = o.successRate==null?'—':o.successRate+'%';
   var api=o.apiHealth||{}; var apiCls = api.degraded?'bad':'ok';
   var totalCmd = (o.commands||[]).reduce(function(n,c){return n+c.count},0);
+  // hero strip — brand crest, live KPIs (single instance, values refreshed)
+  var hero=document.getElementById('heroStrip');
+  if(!hero){
+    hero=document.createElement('div'); hero.id='heroStrip'; hero.className='hero';
+    var crest=el('div','crest'); crest.innerHTML=CREST; hero.appendChild(crest);
+    var hx=el('div',null); var h2=el('h2',null,'BypassX Mission Control'); var hp=el('p',null, 'Owner console v3 · everything the bot sees, you see');
+    hx.appendChild(h2); hx.appendChild(hp); hero.appendChild(hx);
+    var kpis=el('div','kpis'); kpis.id='heroKpis'; hero.appendChild(kpis);
+    g.parentNode.insertBefore(hero, g);
+  }
+  var kpis=document.getElementById('heroKpis'); kpis.innerHTML='';
+  [['invokables',(o.bot.invokableCount||0)],['guilds',o.guilds.count],['bypasses',(o.counters.bypasses||0).toLocaleString()],['uptime',fmtDur(o.bot.uptimeSec)]].forEach(function(kv){
+    var k=el('div','kpi'); k.appendChild(el('b',null,String(kv[1]))); k.appendChild(el('span',null,kv[0])); kpis.appendChild(k);
+  });
   var items=[
     statCard('Guilds', o.guilds.count),
     statCard('Total members', o.guilds.totalMembers.toLocaleString()),
@@ -326,13 +367,13 @@ function renderStats(o){
     statCard('WS ping', (o.bot.wsPingMs==null?'—':o.bot.wsPingMs+'ms')),
     statCard('Uptime', fmtDur(o.bot.uptimeSec)),
     statCard('Memory', o.bot.memoryMB+' <small>MB</small>'),
-    statCard('Slash commands', (o.bot.commandCount||0) + ' <small>top-level</small>'),
+    statCard('Slash commands', (o.bot.commandCount||0) + ' <small>top · ' + (o.bot.invokableCount||0) + ' invokable</small>'),
     statCard('Dashboard actions', (o.actions||[]).length, 'acc'),
     statCard('Version','v'+o.bot.version),
     statCard('Feedback', (o.feedback||[]).length + ' <small>queued</small>', (o.feedback||[]).length?'warn':''),
   ];
   items.forEach(function(s){ g.appendChild(s); });
-  $('#botline').textContent = (o.bot.tag||'—') + ' · ' + (o.bot.commandCount||0) + ' commands · node ' + o.bot.node;
+  $('#botline').textContent = (o.bot.tag||'—') + ' · ' + (o.bot.commandCount||0) + ' commands / ' + (o.bot.invokableCount||0) + ' invokable · node ' + o.bot.node;
   $('#headStatus').textContent = o.flags.maintenance ? 'MAINTENANCE' : 'LIVE';
   $('#headDot').className = 'dot' + (o.flags.maintenance ? ' bad' : '');
 
@@ -498,8 +539,10 @@ ${HEAD('BypassX · Owner Console')}
 <div class="shell">
   <aside class="side">
     <div class="brand">
-      <div class="bolt">⚡</div>
-      <h1>BypassX<span>Owner Console v2</span></h1>
+      <div class="bolt">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M37 4 L13 37 h13.5 L21 60 L51 26 H34.5 Z" fill="#fff"/></svg>
+      </div>
+      <h1>BypassX<span>Owner Console v3</span></h1>
     </div>
     <nav>
       <button id="nav-overview" class="on"><span class="ic">◈</span><span class="lbl">Overview</span></button>
@@ -509,7 +552,7 @@ ${HEAD('BypassX · Owner Console')}
       <button id="nav-logs"><span class="ic">🕘</span><span class="lbl">Logs &amp; feedback</span></button>
       <button id="nav-config"><span class="ic">🎚️</span><span class="lbl">Config</span></button>
     </nav>
-    <div class="foot">token-gated · every action is logged<br>bypassx-omega.vercel.app</div>
+    <div class="foot">token-gated · every action is logged<br>bypassx.de5.net</div>
   </aside>
 
   <main class="main">
@@ -620,7 +663,9 @@ ${HEAD('BypassX · Owner Console — login')}
 <div class="aurora"><i></i><i></i><i></i></div>
 <div class="login">
   <div class="card">
-    <div class="bolt">⚡</div>
+    <div class="bolt">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M37 4 L13 37 h13.5 L21 60 L51 26 H34.5 Z" fill="#fff"/></svg>
+    </div>
     <h1>BypassX Owner Console</h1>
     <p class="mut" style="font-size:13px">Private area — enter the <span class="mono">DASHBOARD_TOKEN</span> to continue.</p>
     <form method="GET" action="/dashboard">

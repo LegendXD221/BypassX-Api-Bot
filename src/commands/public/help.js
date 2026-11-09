@@ -2,7 +2,7 @@ import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } fro
 import { inviteUrl, config } from '../../config.js';
 import { V2, card } from '../../components.js';
 import { diffStatus, codeBlock } from '../../format.js';
-import { categorize, CATEGORY_META } from '../catalog.js';
+import { categorize, countInvokables, CATEGORY_META } from '../catalog.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -41,7 +41,7 @@ export default {
         card({
           emoji: '🧭',
           title: 'BypassX Api — Help',
-          subtitle: `${total} top-level commands · filterable with /commands`,
+          subtitle: `${total} top-level commands · ${countInvokables(interaction.client.commands)} invokable actions · filterable with /commands`,
           body: [
             lines.join('\n\n'),
             diffStatus({

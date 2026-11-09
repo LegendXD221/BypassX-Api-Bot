@@ -237,7 +237,7 @@ ok('components: all V2 containers + button rules');
 
 /* ---------- command registry ---------- */
 const { commandData } = await import('../src/commands/index.js');
-assert.equal(commandData.length, 40, '39 top-level commands (v2.0 catalog)');
+assert.equal(commandData.length, 42, '42 top-level commands (v3 catalog: +tools, +text)');
 for (const c of commandData) {
   assert.ok(c.name && c.name.length <= 32, `valid name: ${c.name}`);
   // chat-input commands carry a description (≤100 chars); context menus don't have one
@@ -267,6 +267,8 @@ for (const expected of [
   'owner',
   // v2.0 catalog
   'bx', 'utility', 'fun', 'server', 'info',
+  // v3 catalog
+  'tools', 'text',
   'leaderboard', 'history', 'serviceinfo', 'randomservice', 'docs',
   'changelog', 'privacy', 'reminder', 'poll', 'faq',
   'shortcuts', 'uptime', 'tip', 'commands',
@@ -389,7 +391,9 @@ for (const a of ['member_kick', 'member_ban', 'delete_channel', 'delete_role', '
 
 const page = await import('../src/dashboard-page.js');
 const dashHtml = page.dashboardHtml();
-assert.match(dashHtml, /Owner Console v2/, 'v2 dashboard title');
+assert.match(dashHtml, /Owner Console v3/, 'v3 dashboard title');
+assert.match(dashHtml, /heroStrip/, 'v3 hero strip present');
+assert.match(dashHtml, /Mission Control/, 'v3 hero heading');
 assert.match(dashHtml, /Owner Console/, 'dashboard title');
 assert.match(page.dashboardLoginHtml(), /DASHBOARD_TOKEN/);
 // v2 UI: sidebar tabs + action palette + command usage table + console drawer
@@ -485,7 +489,10 @@ const pollMod = await import('../src/commands/public/poll.js');
 assert.equal(typeof pollMod.handlePollButton, 'function', 'poll exposes its button handler');
 const { categorize, countInvokables, categoryFor, CATEGORY_META } = await import('../src/commands/catalog.js');
 const { commands: coll } = await import('../src/commands/index.js');
-assert.equal(coll.size, 40, 'collection holds all 39');
+assert.equal(coll.size, 42, 'collection holds all 42 (v3 catalog)');
+assert.equal(categoryFor('tools'), 'utility', 'tools categorized as utility');
+assert.equal(categoryFor('text'), 'utility', 'text categorized as utility');
+assert.ok(countInvokables(coll) >= 130, '100+ invokable actions guaranteed');
 assert.equal(categoryFor('bx'), 'bypass', 'bx categorized as bypass');
 assert.equal(categoryFor('utility'), 'utility', 'utility categorized');
 assert.equal(categoryFor('nonexistent-cmd'), 'meta', 'unknown falls to meta');

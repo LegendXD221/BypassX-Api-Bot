@@ -1,10 +1,10 @@
 import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { config } from '../../config.js';
 import { store } from '../../db.js';
-import { bypassUrl, cacheGet, cacheSet, matchService, refreshSupported } from '../../api.js';
-import { V2, card, errorContainer, feedbackContainer } from '../../components.js';
+import { bypassUrl, cacheGet, cacheSet, cacheStats, matchService, refreshSupported } from '../../api.js';
+import { V2, card, errorContainer, feedbackContainer, resultButtons, oauthContainer } from '../../components.js';
 import { truncate } from '../../util.js';
-import { diffBlock, diffStatus, cut } from '../../format.js';
+import { diffBlock, diffStatus, diffFail, codeBlock, kvTable, cut } from '../../format.js';
 import { runBypass, normalizeBypassUrl } from '../public/bypass-core.js';
 
 /* ------------------------------------------------------------------ */
@@ -53,6 +53,24 @@ export default {
     )
     .addSubcommand((sc) =>
       sc
+        .setName('chain')
+        .setDescription('Bypass a link — and if the result is gated again, keep going (up to 3 hops)')
+        .addStringOption((o) => o.setName('url').setDescription('First gated link').setRequired(true).setMaxLength(1024))
+        .addBooleanOption((o) => o.setName('hidden').setDescription('Only you can see the result (default: off)'))
+    )
+    .addSubcommand((sc) =>
+      sc
+        .setName('export')
+        .setDescription('Export your last 10 bypasses as a JSON code block')
+    )
+    .addSubcommand((sc) =>
+      sc
+        .setName('cacheinfo')
+        .setDescription('Cache stats — entries, hit rate, and whether a link is already cached')
+        .addStringOption((o) => o.setName('url').setDescription('Optional link to check against the cache').setMaxLength(1024))
+    )
+    .addSubcommand((sc) =>
+      sc
         .setName('suggest')
         .setDescription('Suggest a service or feature straight to the bot owner')
         .addStringOption((o) => o.setName('idea').setDescription('What should BypassX support or improve?').setRequired(true).setMaxLength(900))
@@ -70,6 +88,12 @@ export default {
         return runMulticheck(interaction);
       case 'last':
         return runLast(interaction);
+      case 'chain':
+        return runChain(interaction);
+      case 'export':
+        return runExport(interaction);
+      case 'cacheinfo':
+        return runCacheinfo(interaction);
       case 'suggest':
         return runSuggest(interaction);
       default:
@@ -295,6 +319,231 @@ async function runSuggest(interaction) {
           cut(idea, 500),
           '-# Everything you send lands in the owner console too.',
         ],
+      }),
+    ],
+  });
+}
+
+/* ---------------- chain ---------------- */
+
+const CHAIN_MAX_HOPS = 3;
+
+async function runChain(interaction) {
+  const first = safeUrl(interaction.options.getString('url', true));
+  if (!first) {
+    return interaction.reply({
+      flags: V2 | MessageFlags.Ephemeral,
+      components: [errorContainer({ title: 'Invalid link', description: 'That does not look like a public http(s) URL.' })],
+    });
+  }
+  const hidden = interaction.options.getBoolean('hidden') ?? false;
+  await interaction.deferReply(hidden ? { flags: MessageFlags.Ephemeral } : undefined);
+  await interaction
+    .editReply({
+      content: `<@${interaction.user.id}> chain-bypassing…\n\`\`\`diff\n+ hop 1 — working on it\n\`\`\``,
+      allowedMentions: { users: [interaction.user.id] },
+    })
+    .catch(() => {});
+
+  const steps = [];
+  let url = first;
+  let finalResult = null;
+  let finalError = null;
+  for (let hop = 1; hop <= CHAIN_MAX_HOPS; hop++) {
+    let result = null;
+    const cached = cacheGet(url);
+    if (cached) {
+      result = cached;
+    } else {
+      try {
+        result = await bypassUrl(url);
+      } catch (e) {
+        finalError = e;
+        break;
+      }
+    }
+    store.bump('bypasses');
+    store.logBypass({
+      userId: interaction.user.id,
+      guildId: interaction.guildId ?? null,
+      channelId: interaction.channelId ?? null,
+      source: `bx chain hop${hop}`,
+      url,
+      domain: hostOf(url),
+      resultUrl: result.kind === 'destination' && /^https?:\/\//.test(result.url) ? result.url : null,
+      success: true,
+    });
+    if (result.kind === 'oauth') {
+      steps.push({ url, kind: 'oauth', serviceName: result.serviceName });
+      return interaction.editReply({
+        content: '',
+        components: [
+          oauthContainer({
+            siteName: result.serviceName,
+            action: result.action,
+            note: result.note,
+            sourceUrl: url,
+            userId: interaction.user.id,
+          }),
+        ],
+        flags: V2,
+      });
+    }
+    if (result.kind !== 'destination') {
+      finalError = new Error('API returned an unexpected result kind — try /bypass directly');
+      break;
+    }
+    if (!cached && result.kind === 'destination') cacheSet(url, result);
+    const nextSupported = matchService(result.url);
+    steps.push({ url, result, nextSupported: Boolean(nextSupported) });
+    if (!nextSupported || hop === CHAIN_MAX_HOPS) {
+      finalResult = result;
+      break;
+    }
+    url = result.url;
+  }
+
+  if (!finalResult && !finalError) {
+    finalError = new Error('chain stalled — no result produced');
+  }
+
+  if (finalError && steps.length === 0) {
+    store.bump('failures');
+    store.logBypass({
+      userId: interaction.user.id,
+      guildId: interaction.guildId ?? null,
+      channelId: interaction.channelId ?? null,
+      source: 'bx chain',
+      url: first,
+      domain: hostOf(first),
+      success: false,
+      error: finalError.message,
+    });
+    return interaction.editReply({
+      content: '',
+      components: [
+        errorContainer({
+          title: 'Chain failed on hop 1',
+          description: finalError instanceof ApiError ? finalError.message : 'Something went wrong while contacting the BypassX API.',
+          retryUrl: first,
+          retryUserId: interaction.user.id,
+        }),
+      ],
+      flags: V2,
+    });
+  }
+
+  const lines = steps.map((s, i) => {
+    const head = `hop ${i + 1} · ${s.result?.serviceName ?? s.serviceName ?? hostOf(s.url)}`;
+    if (s.kind === 'oauth') return `! ${head} — paused for sign-in`;
+    if (i === steps.length - 1) return `+ ${head} → ${cut(s.result.url, 110)}`;
+    return `> ${head} → still gated, continuing…`; // next hop continues
+  });
+
+  const body = [];
+  if (finalResult) {
+    body.push(`## ⛓️ Chain complete\n-# ${steps.length} hop${steps.length === 1 ? '' : 's'} · ${finalResult.serviceName ?? hostOf(finalResult.url)}`);
+    body.push(codeBlock('diff', lines.join('\n'), 1300));
+    body.push(`**Final result**\n${diffBlock({ add: [cut(finalResult.url, 300)] })}`);
+  } else if (steps.length) {
+    // Last hop failed after progress
+    store.bump('failures');
+    body.push(`## ⛓️ Chain broke on hop ${steps.length + 1}`);
+    body.push(codeBlock('diff', lines.join('\n'), 1300));
+    body.push(diffFail(cut(finalError?.message ?? 'unknown error', 200)));
+    body.push('-# progress steps above are still valid — retry from the last hop');
+  }
+
+  const rows = [];
+  if (finalResult && /^https:\/\//.test(finalResult.url)) {
+    rows.push(resultButtons(finalResult.url));
+  }
+
+  await interaction.editReply({
+    content: '',
+    components: [
+      card({
+        accent: finalResult ? config.colors.success : config.colors.error,
+        title: 'Chain Results',
+        body,
+        rows,
+        footerText: 'bx chain · follows gated→gated hops automatically',
+      }),
+    ],
+    flags: V2,
+  });
+}
+
+/* ---------------- export ---------------- */
+
+async function runExport(interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const rows = await store.userHistory(interaction.user.id, { limit: 10 });
+  if (!rows.length) {
+    return interaction.editReply({
+      flags: V2,
+      components: [errorContainer({ title: 'Nothing to export', description: 'No bypass history yet — run `/bypass` first.' })],
+    });
+  }
+  const payload = rows.map((r) => ({
+    at: r.created_at ?? null,
+    source: r.source,
+    url: r.url,
+    result: r.result_url ?? null,
+    success: r.success,
+  }));
+  await interaction.editReply({
+    flags: V2,
+    components: [
+      card({
+        accent: config.colors.primary,
+        emoji: '📦',
+        title: 'History export',
+        body: [
+          diffBlock({ add: [`${payload.length} entr${payload.length === 1 ? 'y' : 'ies'} — newest first`] }),
+          codeBlock('json', cut(JSON.stringify(payload, null, 2), 1600)),
+          '-# visible only to you · includes successful runs and failures',
+        ],
+        footerText: 'bx export',
+      }),
+    ],
+  });
+}
+
+/* ---------------- cacheinfo ---------------- */
+
+async function runCacheinfo(interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const raw = interaction.options.getString('url');
+  const stats = cacheStats();
+  const rows = [
+    ['entries', String(stats.size ?? '—')],
+    ['ttl', stats.ttlMs != null ? `${Math.round(stats.ttlMs / 1000)}s` : '—'],
+    ['lifetime hits', stats.hits != null ? String(stats.hits) : '—'],
+  ];
+  let verdict = null;
+  if (raw) {
+    const url = safeUrl(raw);
+    if (!url) {
+      return interaction.editReply({
+        flags: V2,
+        components: [errorContainer({ title: 'Invalid link', description: 'That does not look like a public http(s) URL.' })],
+      });
+    }
+    const hit = cacheGet(url);
+    verdict = hit
+      ? `+ cached — served instantly on next /bypass${hit.serviceName ? ` (${hit.serviceName})` : ''}`
+      : '- not cached — next /bypass will do the full run';
+  }
+  await interaction.editReply({
+    flags: V2,
+    components: [
+      card({
+        accent: config.colors.primary,
+        emoji: '🗄️',
+        title: 'Cache state',
+        body: [kvTable(rows, { title: 'in-memory result cache' }), verdict].filter(Boolean),
+        footerText: 'cache lives in RAM — resets on restart',
       }),
     ],
   });

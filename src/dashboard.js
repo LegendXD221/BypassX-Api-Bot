@@ -8,6 +8,7 @@ import { apiHealth } from './watchdog.js';
 import { log } from './logger.js';
 import { dashboardHtml, dashboardLoginHtml } from './dashboard-page.js';
 import { diffBlock, codeBlock } from './format.js';
+import { countInvokables } from './commands/catalog.js';
 
 /* ------------------------------------------------------------------ */
 /* Auth — timing-safe token compare, header (?Authorization: Bearer)   */
@@ -98,6 +99,7 @@ async function buildOverview(ctx) {
       memoryMB: Math.round(process.memoryUsage().rss / 1048576),
       node: process.version,
       commandCount: client?.commands?.size ?? client?.commands?.length ?? 0,
+      invokableCount: countInvokables(client?.commands),
       presence:
         client?.presence?.activities?.length
           ? client.presence.activities.map((a) => `${a.name}`).join(', ')
