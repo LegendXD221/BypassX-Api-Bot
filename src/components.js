@@ -80,6 +80,15 @@ export function feedbackContainer({ from, userId, guild, message }) {
 /* Result card — Mobile Copy / PC Copy / Open Result                   */
 /* ------------------------------------------------------------------ */
 
+/** Discord rejects link-button URLs over 512 chars (50035 BASE_TYPE_MAX_LENGTH). */
+export const DISCORD_URL_MAX = 512;
+
+/** https URL short enough for a Discord link button — null when unusable. */
+export function safeLinkUrl(url) {
+  if (typeof url !== 'string' || !/^https:\/\//i.test(url)) return null;
+  return url.length <= DISCORD_URL_MAX ? url : null;
+}
+
 /** The three signature buttons. "Open Result" only appears on https:// links. */
 export function resultButtons(resultUrl) {
   const token = issueToken({ url: resultUrl }, 45 * 60_000);
@@ -96,10 +105,11 @@ export function resultButtons(resultUrl) {
       .setEmoji('💻')
       .setStyle(ButtonStyle.Secondary)
   );
-  if (/^https:\/\//i.test(resultUrl)) {
+  const link = safeLinkUrl(resultUrl);
+  if (link) {
     row.addComponents(
       new ButtonBuilder()
-        .setURL(resultUrl)
+        .setURL(link)
         .setLabel('Open Result')
         .setEmoji('🔗')
         .setStyle(ButtonStyle.Link)
@@ -147,6 +157,14 @@ export function resultContainer({ sourceUrl, result, auto = false }) {
   }
   c.addSeparatorComponents((s) => s.setSpacing(SeparatorSpacingSize.Small).setDivider(true));
   c.addActionRowComponents(resultButtons(result.url));
+  // Discord caps link-button URLs at 512 chars (BASE_TYPE_MAX_LENGTH) — when a
+  // destination is longer, the Open Result button is dropped (the copy buttons
+  // still carry the FULL link server-side); say so instead of failing silently.
+  if (isLink && !safeLinkUrl(result.url)) {
+    c.addTextDisplayComponents((t) =>
+      t.setContent('-# Open Result button hidden — this link is longer than Discord\u2019s 512-char URL limit. Use the copy buttons; they carry the full link.')
+    );
+  }
   c.addTextDisplayComponents((t) => t.setContent(brand(auto ? 'auto-bypass' : null)));
   return c;
 }
@@ -175,11 +193,15 @@ export function oauthContainer({ siteName, action, note, sourceUrl, userId }) {
   );
   c.addActionRowComponents(
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setURL(action.authorizeUrl)
-        .setLabel(`Sign in with ${providerLabel}`)
-        .setEmoji('🔐')
-        .setStyle(ButtonStyle.Link),
+      ...(safeLinkUrl(action.authorizeUrl)
+        ? [
+            new ButtonBuilder()
+              .setURL(action.authorizeUrl)
+              .setLabel(`Sign in with ${providerLabel}`)
+              .setEmoji('🔐')
+              .setStyle(ButtonStyle.Link),
+          ]
+        : []),
       new ButtonBuilder()
         .setCustomId(`bxoauth:${token}`)
         .setLabel('I signed in')
@@ -187,6 +209,11 @@ export function oauthContainer({ siteName, action, note, sourceUrl, userId }) {
         .setStyle(ButtonStyle.Primary)
     )
   );
+  if (!safeLinkUrl(action.authorizeUrl)) {
+    c.addTextDisplayComponents((t) =>
+      t.setContent(`**Sign-in link** (button hidden — the URL exceeds Discord's 512-char limit; copy it manually)\n${action.authorizeUrl}`)
+    );
+  }
   c.addTextDisplayComponents((t) => t.setContent(brand('handoff expires soon — finish it in one go')));
   return c;
 }

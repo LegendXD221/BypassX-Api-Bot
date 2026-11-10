@@ -195,6 +195,27 @@ const btnsUrl = resultButtons('https://mega.nz/file/abc123').toJSON();
 assert.equal(btnsUrl.components.length, 3, 'https result: 3 buttons');
 assert.equal(btnsUrl.components[2].style, 5, 'Open Result is a link button');
 
+// v2.2.0 regression: >512-char destination URLs must NOT produce a link button
+// (Discord 50035 BASE_TYPE_MAX_LENGTH killed the whole auto-bypass message).
+const longUrl = `https://dest.example/a?${'x'.repeat(600)}`;
+assert.ok(longUrl.length > 512, 'long url fixture is actually long');
+const btnsLong = resultButtons(longUrl).toJSON();
+assert.equal(btnsLong.components.length, 2, '>512-char url: no Open button (50035 guard)');
+const longCard = resultContainer({
+  sourceUrl: 'https://lootlabs.gg/l/abc',
+  result: { kind: 'destination', url: longUrl, serviceName: 'LootLabs', note: null, elapsedMs: 1, cached: false },
+  auto: true,
+});
+const jl = JSON.stringify(longCard.toJSON());
+assert.ok(jl.includes('512-char'), '>512 result card explains the hidden button');
+const linkButtons = [];
+for (const comp of longCard.toJSON().components ?? []) {
+  for (const inner of comp.components ?? []) {
+    for (const b of inner.components ?? []) if (b.style === 5) linkButtons.push(b);
+  }
+}
+assert.equal(linkButtons.length, 0, 'no link-style button anywhere on a >512 card');
+
 const oc = oauthContainer({
   siteName: 'Delta',
   action: { kind: 'oauth', provider: 'discord', authorizeUrl: 'https://discord.com/oauth2/authorize?x=1', ref: 'a1b2c3', expiresInMs: 600000 },

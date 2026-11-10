@@ -20,15 +20,43 @@ Honest running log of decisions, changes and incidents. Newest first.
     not the repo. The 2026-11-09/10 pushes were silently inert.
   - `render_deploy_bot.py` (tarball-boot variant) was a dead iteration: its
     dockerCommand can't be set via API on image runtimes (recorded earlier).
-- FIX: the 2026-11-08 Render repo-validation outage is long over →
-  `PATCH /v1/services/{id}` switched the service back to the **repo runtime**
-  (Node, `npm install` → `npm start`, health check `/health`). This also
-  re-arms `autoDeploy: yes` / `autoDeployTrigger: commit` — every push to
-  `main` now ships by itself again (no image rebuild dance).
+- FIX ATTEMPTED: switch back to the **repo runtime** with a single PATCH
+  (Node, `npm install` → `npm start`, health `/health`) — BLOCKED: Render's
+  repo-validation outage from 2026-11-08 is STILL live ("passed in repository
+  URL is invalid or unfetchable", HTTP 400, same message as the canary-verified
+  platform incident). Fell back to the image rebuild below.
 - VERSION MARKER: config/package bumped 2.0.0 → **2.2.0** (v2.1.0 was tagged
   upstream but never deployed; the boot banner now proves which code runs).
 - DEPLOY TRIGGER NOTE: the owner's deploy script was updated to always
   trigger a fresh deploy + env-sync (drops the dead MIN_GUILD_MEMBERS var).
+- IMAGE REBUILD: repo-runtime PATCH blocked — Render's repo-validation outage
+  from 2026-11-08 STILL live ("passed in repository URL is invalid or
+  unfetchable", canary-verified platform-side back then). Rebuilt the GHCR
+  image instead, same no-daemon pipeline as before: stage src+scripts+lockfile
+  → `npm install --omit=dev` → tar → `crane mutate --append --workdir /app
+  --entrypoint node,/app/src/index.js -e NODE_ENV=production node:20-alpine
+  -t ghcr.io/legendxd221/bypassx-deobf-bot:api-bot`. PAT (write:packages)
+  used for the push. Deploy triggered via API → **live: v2.2.0 banner,
+  Neon ready, Logged in as BypassX Api#0825, Registered 42 global commands,
+  49 services / 87 domains.** ("shutdown requested" lines in the log are the
+  outgoing instance's SIGTERM during deploy swap — benign.)
+- **50035 FIX — the actual "bot showing errors" bug**: live logs caught
+  `Auto-bypass handler error: DiscordAPIError[50035]: Invalid Form Body
+  components[…].url[BASE_TYPE_MAX_LENGTH]: Must be 512 or fewer in length`
+  at messageCreate.js:116. When a bypassed destination URL exceeded 512
+  chars, the "Open Result" link button blew Discord's form validation and
+  the ENTIRE result message was rejected — auto-bypass looked dead. Fix:
+  - `safeLinkUrl()` + `DISCORD_URL_MAX = 512` in components.js — every link
+    button URL now passes through it.
+  - `resultButtons()` / `resultContainer()`: >512-char results drop the Open
+    Result button and add a `-#` explanation line (copy buttons still carry
+    the FULL link server-side — nothing is lost).
+  - `oauthContainer()`: >512-char authorize URLs drop the Sign-in button and
+    render the raw link as text instead.
+  - `/bx chain` (suites/bx.js): long result URLs are skipped for buttons with
+    a count note; ≤5 safe links still get buttons.
+  - Smoke regression: >512 fixture → no style-5 button anywhere on the card;
+    16/16 groups green.
 
 ---
 

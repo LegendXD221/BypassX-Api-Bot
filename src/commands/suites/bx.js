@@ -2,7 +2,7 @@ import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Mess
 import { config } from '../../config.js';
 import { store } from '../../db.js';
 import { bypassUrl, cacheGet, cacheSet, cacheStats, matchService, refreshSupported } from '../../api.js';
-import { V2, card, errorContainer, feedbackContainer, resultButtons, oauthContainer } from '../../components.js';
+import { V2, card, errorContainer, feedbackContainer, resultButtons, oauthContainer, safeLinkUrl } from '../../components.js';
 import { truncate } from '../../util.js';
 import { diffBlock, diffStatus, diffFail, codeBlock, kvTable, cut } from '../../format.js';
 import { runBypass, normalizeBypassUrl } from '../public/bypass-core.js';
@@ -181,16 +181,20 @@ async function runBatch(interaction) {
 
   const rows = [];
   const linkButtons = wins
-    .filter((r) => /^https:\/\//i.test(r.result.url))
+    .filter((r) => safeLinkUrl(r.result.url))
     .slice(0, 5)
     .map((r) =>
       new ButtonBuilder()
-        .setURL(r.result.url)
+        .setURL(safeLinkUrl(r.result.url))
         .setLabel((hostOf(r.url) || 'result').slice(0, 60))
         .setEmoji('🔗')
         .setStyle(ButtonStyle.Link)
     );
   if (linkButtons.length) rows.push(new ActionRowBuilder().addComponents(...linkButtons));
+  const hiddenLong = wins.filter((r) => /^https:\/\//i.test(r.result.url) && !safeLinkUrl(r.result.url)).length;
+  if (hiddenLong) {
+    body.push(`-# ${hiddenLong} result link${hiddenLong === 1 ? '' : 's'} exceeded Discord's 512-char button limit — copy ${hiddenLong === 1 ? 'it' : 'them'} from the report above.`);
+  }
 
   await interaction.editReply({
     content: '',
