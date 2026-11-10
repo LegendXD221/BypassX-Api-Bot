@@ -248,7 +248,6 @@ var GROUPS = [
    {id:'reconnect_gateway', desc:'Bounce the gateway connection', args:[]},
    {id:'dump_env', desc:'Show which env vars are set (values redacted)', args:[]},
    {id:'shutdown', danger:1, desc:'Stop the process (Render restarts it)', args:[]},
-   {id:'run_autoleave', danger:1, desc:'Sweep guilds under the member threshold', args:[]},
  ]},
  {name:'Moderation', color:'#f87171', acts:[
    {id:'blacklist_user', desc:'Blacklist a user', args:[['userId','user ID'],['reason','reason (optional)']]},

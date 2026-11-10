@@ -48,8 +48,6 @@
   the bot pings the poster with **“bypassing your link…”** while it works
 - 👋 **Live acknowledgement** — `/bypass` (and its retry/rerun buttons) immediately shows
   **“@you bypassing your link…”** until the result card replaces it
-- 🧹 **Auto-leave** — the bot automatically leaves servers with fewer than **150 members**
-  (`MIN_GUILD_MEMBERS`, politely DMs the owner first)
 - 🧠 Result caching, per-user cooldowns, user & guild blacklist, bypass audit logs,
   lifetime counters — all persisted in **Neon Postgres (free tier)**
 - 🔄 **Dual database transport** — raw TCP first, automatic failover to Neon's
@@ -120,7 +118,6 @@ application — set `GUILD_ID` for instant registration in your test server).
 | `BX_API_URL` | – | Official API base (default: production) |
 | `BX_API_KEY` | ✅* | BypassX API key — *needed for bypasses* |
 | `DATABASE_URL` | – | Neon Postgres connection string — state persistence (memory-only without it) |
-| `MIN_GUILD_MEMBERS` | – | Auto-leave threshold (default `150`, `0` disables) |
 | `SUPPORT_SERVER_URL` | – | Optional invite shown by `/support` |
 | `GUILD_ID` | – | Test guild for instant command registration |
 | `DASHBOARD_TOKEN` | – | Unlocks the owner web console at `/dashboard` — **dashboard stays 404-hidden when unset** |

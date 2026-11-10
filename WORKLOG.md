@@ -4,6 +4,30 @@ Honest running log of decisions, changes and incidents. Newest first.
 
 ---
 
+## 2026-11-10 — auto-leave policy removed (bot stays in every server)
+
+- ASK: "Remove the bot feature where it leaves servers that has less than
+  150 members".
+- REMOVED end-to-end, every layer:
+  - `config.minGuildMembers` + the `MIN_GUILD_MEMBERS` env var (was default 150).
+  - Join-time leave in `guildCreate` (DM + `guild.leave()` for small servers) —
+    every new server now gets the normal welcome card regardless of size.
+  - The 10-min sweep + 60s first-pass in `ready` (`runSmallGuildSweep`,
+    `startSmallGuildSweep`, `dmOwnerBeforeLeaving`).
+  - `/owner sweep` subcommand + dispatch case + handler.
+  - Dashboard action `run_autoleave` (action map, DANGER set, palette row,
+    `minGuildMembers` overview flag, `MIN_GUILD` env-display regex).
+  - `leaveCard` component + its smoke coverage.
+  - Threshold footnotes on `/status` (`· auto-leave 150+`) and `/serverinfo`
+    ("Threshold: …") and the welcome card's "only stays in servers with …"
+    line (replaced with a /help tip).
+  - README feature bullet + env-table row.
+- KEPT (deliberate, not the auto-leave policy): manual `/owner leave <guild_id>`
+  and the dashboard `leave_guild` action — owner-triggered, one guild at a time.
+- `npm run smoke` green; `node --check` clean on every touched file.
+
+---
+
 ## 2026-11-09 — v3 catalog: 100+ invokable actions + dashboard v3
 
 - ASK: "Make The Bot Dashboard Look More Good And Add Extremely Powerfull

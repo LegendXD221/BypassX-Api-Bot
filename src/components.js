@@ -324,20 +324,3 @@ export function statusPanel(rows, { title = 'SYSTEM STATUS' } = {}) {
   ];
   return ansiBlock(lines);
 }
-
-/* ------------------------------------------------------------------ */
-/* Leave notice (sent to a guild owner before auto-leaving)            */
-/* ------------------------------------------------------------------ */
-
-export function leaveCard(guild) {
-  return card({
-    accent: config.colors.neutral,
-    emoji: '👋',
-    title: 'BypassX Api has left your server',
-    body: [
-      `Thanks for trying **BypassX Api** in **${guild.name}**!`,
-      `To keep things fast and spam-free for everyone, the bot only stays in servers with **${config.minGuildMembers}+ members**.`,
-      'Feel free to invite it back once your server qualifies — settings you made are saved.',
-    ],
-  });
-}

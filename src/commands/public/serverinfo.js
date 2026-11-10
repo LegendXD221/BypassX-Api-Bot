@@ -1,5 +1,4 @@
 import { SlashCommandBuilder, MessageFlags, InteractionContextType } from 'discord.js';
-import { config } from '../../config.js';
 import { store } from '../../db.js';
 import { V2, card } from '../../components.js';
 
@@ -24,7 +23,6 @@ export default {
       stats
         ? `**Bypass activity (30 days)**\n${stats.total} bypass${stats.total === 1 ? '' : 'es'} · ${stats.successRate}% success · ${stats.users} unique user${stats.users === 1 ? '' : 's'}${stats.topDomains.length ? `\nTop: ${stats.topDomains.map((d) => `\`${d.domain}\` (${d.n})`).join(' · ')}` : ''}`
         : '**Bypass activity**\nNo database history for this server yet.',
-      `-# Threshold: the bot stays in servers with ${config.minGuildMembers}+ members.`,
     ];
 
     await interaction.reply({

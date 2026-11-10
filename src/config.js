@@ -26,9 +26,6 @@ export const config = {
   // Persistence (Neon Postgres, free tier)
   databaseUrl: process.env.DATABASE_URL ?? '',
 
-  // Guild policy
-  minGuildMembers: Math.max(0, Number(process.env.MIN_GUILD_MEMBERS ?? 150)),
-
   // Runtime
   supportServerUrl: process.env.SUPPORT_SERVER_URL ?? '',
 

@@ -28,8 +28,7 @@ const { config, isOwner, inviteUrl } = await import('../src/config.js');
 config.databaseUrl = '';
 assert.equal(isOwner('1134757298733064203'), true, 'default owner id present');
 assert.match(inviteUrl('123'), /^https:\/\/discord\.com\/oauth2\/authorize\?client_id=123/);
-assert.equal(config.minGuildMembers, 150, 'auto-leave threshold defaults to 150');
-ok('config: owner id, invite url, auto-leave threshold');
+ok('config: owner id, invite url');
 
 /* ---------- util ---------- */
 const { extractUrls, isHttpUrl, truncate, formatRate, formatUptime, cooldowns } = await import('../src/util.js');
@@ -169,7 +168,6 @@ const {
   copyContainer,
   servicesContainer,
   broadcastContainer,
-  leaveCard,
   V2,
 } = await import('../src/components.js');
 assert.equal(V2, djs.MessageFlags.IsComponentsV2);
@@ -231,8 +229,6 @@ assert.ok(JSON.stringify(js).includes('Previous') && JSON.stringify(js).includes
 
 assert.ok(card({ title: 'T', body: ['b'] }).toJSON().type === 17);
 assert.ok(broadcastContainer({ message: 'hello', requesterTag: 'owner#1' }).toJSON().type === 17);
-const lc = leaveCard({ name: 'Test Guild', id: '123', memberCount: 42 });
-assert.ok(JSON.stringify(lc.toJSON()).includes('150+ members'), 'leave card explains the threshold');
 ok('components: all V2 containers + button rules');
 
 /* ---------- command registry ---------- */
@@ -290,7 +286,7 @@ assert.ok(bypassCmd.options.some((o) => o.name === 'hidden'), 'bypass has the hi
 const contextCmd = commandData.find((c) => c.name === 'Bypass Link');
 assert.equal(contextCmd.type, 3, 'Bypass Link is a message context command');
 const ownerCmd = commandData.find((c) => c.name === 'owner');
-assert.equal(ownerCmd.options.length, 23, 'owner group has 23 subcommands (17 legacy + sql/avatar/username/cmdstats/prune/config)');
+assert.equal(ownerCmd.options.length, 22, 'owner group has 22 subcommands (17 legacy + sql/avatar/username/cmdstats/prune/config)');
 const cooldownOpt = ownerCmd.options.find((o) => o.name === 'cooldown').options.find((o) => o.name === 'command');
 assert.equal(cooldownOpt.autocomplete, true, 'owner cooldown command uses autocomplete');
 
@@ -316,7 +312,6 @@ for (const [label, container] of [
   ['copy', copyContainer({ url: 'https://a.b/c', mode: 'm' })],
   ['services', servicesContainer({ pageItems: [], page: 0, totalPages: 1, query: '', count: 0, domainCount: 0, token: 't' })],
   ['broadcast', broadcastContainer({ message: 'hi', requesterTag: 'o#1' })],
-  ['leave', leaveCard({ name: 'G', id: '1', memberCount: 42 })],
   ['oauth', oauthContainer({ siteName: 'Delta', action: { kind: 'oauth', provider: 'discord', authorizeUrl: 'https://discord.com/oauth2/authorize?x=1', ref: 'r', expiresInMs: 600000 }, note: 'n', sourceUrl: 'https://a.b/c', userId: '1' })],
 ]) {
   assert.ok(!/github\.com/i.test(JSON.stringify(container.toJSON())), `${label} card carries no GitHub links`);
@@ -365,7 +360,7 @@ const EXPECTED_ACTIONS = [
   'dm_user', 'channel_send', 'broadcast_all', 'broadcast_guild',
   'guild_details', 'guild_channels', 'guild_invite', 'leave_guild', 'find_user',
   'set_maintenance', 'set_presence', 'clear_presence', 'set_avatar', 'set_username',
-  'reconnect_gateway', 'shutdown', 'run_autoleave',
+  'reconnect_gateway', 'shutdown',
   'blacklist_user', 'unblacklist_user', 'blacklist_guild', 'unblacklist_guild',
   'blacklist_list', 'set_cooldown', 'disable_command', 'enable_command', 'toggle_autobypass',
   'clear_cache', 'refresh_services', 'stats_reset', 'prune_logs', 'eval_js', 'test_api',

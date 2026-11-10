@@ -23,7 +23,6 @@ import { kvTable, codeBlock } from '../../format.js';
 import { tokenStats } from '../../tokens.js';
 import * as api from '../../api.js';
 import { commandData } from '../index.js';
-import { runSmallGuildSweep } from '../../events/ready.js';
 
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 const require = createRequire(import.meta.url);
@@ -197,9 +196,6 @@ export default {
       sc.setName('refresh').setDescription('Re-register all slash commands globally (instant sync)')
     )
     .addSubcommand((sc) =>
-      sc.setName('sweep').setDescription('Run the small-guild sweep now — leave every server under the member threshold')
-    )
-    .addSubcommand((sc) =>
       sc
         .setName('feedback')
         .setDescription('Recent user feedback from /feedback')
@@ -285,8 +281,6 @@ export default {
         return subFeedback(interaction);
       case 'refresh':
         return subRefresh(interaction);
-      case 'sweep':
-        return subSweep(interaction);
       case 'reboot':
         return subReboot(interaction);
       case 'sql':
@@ -682,16 +676,6 @@ async function subRefresh(interaction) {
   }
 }
 
-async function subSweep(interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const left = await runSmallGuildSweep(interaction.client);
-  await interaction.editReply({
-    content: left
-      ? `🧹 Sweep complete — left **${left}** server${left === 1 ? '' : 's'} under the ${config.minGuildMembers}-member threshold.`
-      : `🧹 Sweep complete — every server is at or above ${config.minGuildMembers} members.`,
-  });
-}
-
 async function subFeedback(interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const rows = await store.recentFeedback(interaction.options.getInteger('limit') ?? 5);
@@ -839,7 +823,6 @@ async function subConfig(interaction) {
               ['maintenance', maintenance ? 'ON — bot paused for everyone but you' : 'off'],
               ['disabled commands', disabledCommands.length ? disabledCommands.map((c) => `/${c}`).join(', ') : 'none'],
               ['cooldown overrides', Object.keys(overrides).length ? Object.entries(overrides).map(([k, v]) => `${k}=${v}s`).join(', ') : 'none'],
-              ['auto-leave threshold', `${config.minGuildMembers}+ members`],
               ['api key', config.apiKey ? 'configured' : 'MISSING — bypasses offline'],
               ['dashboard', config.dashboardToken ? 'token set — /dashboard live' : 'not configured'],
               ['database', dbHealthy() ? 'connected' : 'memory-only'],

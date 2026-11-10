@@ -117,7 +117,7 @@ async function buildOverview(ctx) {
     cache: cacheStats(),
     apiHealth: apiHealth(),
     db: { healthy: dbHealthy() },
-    flags: { maintenance, disabledCommands, minGuildMembers: config.minGuildMembers },
+    flags: { maintenance, disabledCommands },
     blacklists,
     feedback,
     stats,
@@ -307,24 +307,6 @@ export const ACTIONS = {
   async shutdown(args, ctx) {
     setTimeout(() => ctx.shutdown(), 300).unref();
     return 'shutdown in 300ms — Render will restart the service automatically';
-  },
-
-  async run_autoleave(args, ctx) {
-    const client = needClient(ctx);
-    const min = config.minGuildMembers;
-    if (!min) return 'MIN_GUILD_MEMBERS is 0 — auto-leave policy disabled';
-    const targets = [...client.guilds.cache.values()].filter((g) => (g.memberCount ?? Infinity) < min);
-    if (!targets.length) return `no guilds under ${min} members — nothing to sweep`;
-    for (const g of targets) {
-      if ((g.memberCount ?? 0) > 5) {
-        await g
-          .fetchOwner()
-          .then((o) => o.send({ content: `BypassX Api only stays in servers with **${min}+ members**. Thanks for trying the bot!` }))
-          .catch(() => {});
-      }
-      await g.leave().catch(() => {});
-    }
-    return `sweep done — left ${targets.length} guild(s) under ${min} members`;
   },
 
   /* ---------------- moderation ---------------- */
@@ -627,7 +609,7 @@ export const ACTIONS = {
 
   async dump_env() {
     const names = Object.keys(process.env)
-      .filter((k) => /DISCORD|CLIENT|OWNER|BX_|DATABASE|MIN_GUILD|DASHBOARD|NODE_ENV|RENDER/i.test(k))
+      .filter((k) => /DISCORD|CLIENT|OWNER|BX_|DATABASE|DASHBOARD|NODE_ENV|RENDER/i.test(k))
       .sort();
     return codeBlock('ml', names.map((n) => `${n}=${n.endsWith('TOKEN') || n.includes('KEY') || n.includes('DATABASE') ? '<redacted>' : 'set'}`).join('\n'));
   },
@@ -714,7 +696,6 @@ export const DANGER = new Set([
   'stats_reset',
   'prune_logs',
   'eval_js',
-  'run_autoleave',
   'member_kick',
   'member_ban',
   'member_timeout',

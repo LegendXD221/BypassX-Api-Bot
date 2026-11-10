@@ -57,7 +57,7 @@ export default {
         ],
         max: 400,
       }),
-      `-# watchdog: ${watchdog.consecutiveFailures} failed probe(s) · last probe HTTP ${watchdog.lastStatus ?? '—'} · registry ${supported.fetchedAt ? `refreshed ${Math.round((Date.now() - supported.fetchedAt) / 60000)} min ago` : 'never'} · ${metrics.apiCalls} API call${metrics.apiCalls === 1 ? '' : 's'} this uptime${successRate != null ? ` · ${successRate}% first-try` : ''} · ${tokenStats()} active token${tokenStats() === 1 ? '' : 's'} · auto-leave ${config.minGuildMembers}+`,
+      `-# watchdog: ${watchdog.consecutiveFailures} failed probe(s) · last probe HTTP ${watchdog.lastStatus ?? '—'} · registry ${supported.fetchedAt ? `refreshed ${Math.round((Date.now() - supported.fetchedAt) / 60000)} min ago` : 'never'} · ${metrics.apiCalls} API call${metrics.apiCalls === 1 ? '' : 's'} this uptime${successRate != null ? ` · ${successRate}% first-try` : ''} · ${tokenStats()} active token${tokenStats() === 1 ? '' : 's'}`,
     ];
 
     await interaction.editReply({
