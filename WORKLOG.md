@@ -42,6 +42,51 @@ Honest running log of decisions, changes and incidents. Newest first.
 
 ---
 
+## 2026-11-10 (late) — BROKEN-IMAGE OUTAGE: crash loop "Cannot find module '/app/src/index.js'" 05:45→06:36 UTC; 24/7 keep-alive was never removed — image rebuilt correctly and bot restored
+
+- ASK: "You removed its 24/7 features" — user saw the bot offline in Discord
+  and /health unreachable.
+- WHAT ACTUALLY HAPPENED:
+  - The previous entry's image push was built with a WRONG LAYER TAR ROOT:
+    `tar -cf layer.tar -C $STAGE/app .` archives paths as `./src/...`, and
+    `crane mutate --append` extracts appended layers at the IMAGE ROOT — so
+    the code landed at `/src/index.js` while the entrypoint ran
+    `node /app/src/index.js`. Result: crash loop
+    `Error: Cannot find module '/app/src/index.js'` from the 05:45 deploy
+    until the fix — the bot was dark ~8h (Discord offline, /health dead,
+    Render restarting the instance every few seconds). A deploy-pipeline
+    mistake on top of an otherwise correct code fix; the `.catch?.` repair
+    itself was fine.
+  - The keep-alive ("24/7") feature was NEVER touched: the self-ping block
+    (index.js:151-158, `${RENDER_EXTERNAL_URL}/health` every 5 min) shipped
+    in this image unchanged, and the fixed boot logged
+    `Keep-alive self-ping enabled → https://nexobypass-api.onrender.com/health`.
+- FIX:
+  - Layer tar root corrected: `tar -cf layer.tar -C $STAGE app` → paths
+    `app/src/...` extract to `/app/src/...` at the image root.
+  - NEW MANDATORY GATE before ANY deploy: `crane export <img> - | tar -t`
+    must show `app/src/index.js` + `app/node_modules/discord.js/...`, and
+    `crane config` must show Entrypoint `[node, /app/src/index.js]`,
+    WorkingDir `/app`, NODE_ENV present. Applied this time (caught nothing
+    to catch — but the broken build would have failed this gate).
+  - New digest `sha256:d5580686…` pushed to
+    `ghcr.io/legendxd221/bypassx-deobf-bot:api-bot`; deploy
+    dep-dbpbmm5bedkc7389v6qg (clearCache=clear) → live in ~30s.
+- VERIFIED LIVE:
+  - Boot 06:36:20-25 UTC: `BypassX Api v2.2.0 starting…` ·
+    `Logged in as BypassX Api#0825 — 2 guild(s)` · `Neon Postgres ready
+    (pool max 4)` · `Registered 42 global application commands` ·
+    `Loaded 49 supported services / 87 domains` ·
+    `Health server listening on :10000` · keep-alive self-ping ON.
+  - `/health` → `{"ok":true,"uptime":…,"guilds":2}` HTTP 200; uptime grew
+    52s → 268s across checks with zero restarts (all crash lines in the log
+    buffer predate 06:36) — instance stable, no crash loop.
+  - Slash commands unblocked again (the `.catch?.` fix rides this image).
+- LESSON (process): image-content verification is now mandatory before
+  every deploy — a digest push without an export check cost 8 hours.
+
+---
+
 ## 2026-11-10 (later) — STALE-IMAGE INCIDENT fixed: service switched back to repo runtime (v2.2.0 ships for real)
 
 - ASK: "The Bot Is Showing Errros Fix It Do Scan Of The Code".
