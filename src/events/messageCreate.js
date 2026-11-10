@@ -1,6 +1,6 @@
 import { extractUrls, cooldowns } from '../util.js';
 import { refreshSupported, matchService, bypassUrl, cacheGet, cacheSet } from '../api.js';
-import { V2, resultContainer } from '../components.js';
+import { V2, resultContainer, oauthContainer } from '../components.js';
 import { store } from '../db.js';
 import { log } from '../logger.js';
 
@@ -82,8 +82,14 @@ export async function onMessage(message) {
     if (!result) {
       try {
         result = await bypassUrl(target);
-        cacheSet(target, result);
+        // Cache ONLY concrete destinations (same rule as bypass-core) — a
+        // cached oauth action is a stale handoff by the time it's replayed.
+        if (result.kind === 'destination') cacheSet(target, result);
       } catch (e) {
+        // Un-mark: a failed URL must be RETRYABLE — marking before the call
+        // poisoned it for the whole 10-min TTL (every later message with the
+        // same link silently dropped, no ❌, no retry).
+        recent.delete(target);
         store.bump('failures');
         store.logBypass({
           userId: message.author.id,
@@ -112,6 +118,27 @@ export async function onMessage(message) {
       resultUrl: /^https?:\/\//.test(result.url) ? result.url : null,
       success: true,
     });
+
+    if (result.kind === 'oauth') {
+      // OAuth handoffs render through the oauth container — the generic
+      // resultContainer reads result.url (undefined here) and produced a
+      // "Key Generated" card with an empty diff + "undefined" copy buttons.
+      await message.channel.send({
+        flags: V2,
+        components: [
+          oauthContainer({
+            siteName: result.serviceName,
+            action: result.action,
+            note: result.note,
+            sourceUrl: target,
+            userId: message.author.id,
+          }),
+        ],
+        allowedMentions: { parse: [] },
+      });
+      if (ack) ack.delete().catch(() => {});
+      return;
+    }
 
     await message.channel.send({
       flags: V2,

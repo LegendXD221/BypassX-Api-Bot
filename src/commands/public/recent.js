@@ -17,6 +17,8 @@ export default {
   meta: { cooldownMs: 4000 },
 
   async execute(interaction) {
+    // Defer FIRST — a Neon cold start can blow the 3s ack window.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const rows = await store.recentLogs({ userId: interaction.user.id, limit: 15 });
     const seen = new Set();
     const items = [];
@@ -28,8 +30,7 @@ export default {
     }
 
     if (!items.length) {
-      return interaction.reply({
-        flags: V2 | MessageFlags.Ephemeral,
+      return interaction.editReply({
         components: [
           errorContainer({
             title: 'Nothing here yet',
@@ -62,8 +63,7 @@ export default {
       );
     });
 
-    await interaction.reply({
-      flags: V2,
+    await interaction.editReply({
       components: [
         card({
           emoji: '🕘',

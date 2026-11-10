@@ -27,11 +27,12 @@ export default {
   meta: { cooldownMs: 3000 },
 
   async execute(interaction) {
+    // Defer FIRST — refreshSupported() can take 10s on a cold registry.
+    await interaction.deferReply();
     await refreshSupported();
 
     if (!supported.services.length) {
-      return interaction.reply({
-        flags: V2 | MessageFlags.Ephemeral,
+      return interaction.editReply({
         components: [
           errorContainer({
             title: 'Service list unavailable',
@@ -46,8 +47,7 @@ export default {
     const totalPages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
     const token = issueToken({ kind: 'svc', query }, 60 * 60_000);
 
-    await interaction.reply({
-      flags: V2,
+    await interaction.editReply({
       components: [
         servicesContainer({
           pageItems: list.slice(0, PAGE_SIZE),

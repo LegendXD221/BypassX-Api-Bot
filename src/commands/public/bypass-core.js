@@ -12,7 +12,11 @@ import { MessageFlags } from 'discord.js';
 export async function runBypass({ interaction, url, source = 'command', userId = null, hidden = false }) {
   const requester = userId ?? interaction.user.id;
 
-  await interaction.deferReply(hidden ? { flags: MessageFlags.Ephemeral } : undefined);
+  // /bx last (and any future caller) may arrive already deferred — a second
+  // deferReply throws "Interaction has already been deferred".
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply(hidden ? { flags: MessageFlags.Ephemeral } : undefined);
+  }
 
   // Immediate acknowledgement — the deferred placeholder becomes a
   // diff-styled status line until the result replaces it.

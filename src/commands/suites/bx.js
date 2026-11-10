@@ -128,8 +128,17 @@ async function runBatch(interaction) {
 
   await interaction.deferReply(hidden ? { flags: MessageFlags.Ephemeral } : undefined);
 
+  // Discord kills the interaction token at 15 minutes — any editReply after
+  // that throws "Unknown interaction" and strands the user on the deferral.
+  // Stop at 13 min and render a partial report instead.
+  const deadline = Date.now() + 13 * 60_000;
+
   const results = [];
   for (const url of urls) {
+    if (Date.now() > deadline) {
+      results.push({ url, error: 'skipped — 13-min interaction limit reached; re-run /bx batch for the rest', ok: false });
+      continue;
+    }
     const cached = cacheGet(url);
     if (cached) {
       results.push({ url, result: cached, ok: true });
@@ -269,10 +278,13 @@ async function runMulticheck(interaction) {
 /* ---------------- last ---------------- */
 
 async function runLast(interaction) {
+  // Defer FIRST — the history read hits the database (cold start > 3s);
+  // runBypass below skips its own defer when the interaction is already
+  // deferred (hidden=true wants ephemeral anyway).
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const last = await store.lastBypass(interaction.user.id);
   if (!last?.url) {
-    return interaction.reply({
-      flags: V2 | MessageFlags.Ephemeral,
+    return interaction.editReply({
       components: [
         errorContainer({
           title: 'No history yet',
@@ -353,7 +365,14 @@ async function runChain(interaction) {
   let url = first;
   let finalResult = null;
   let finalError = null;
+  // 13-min guard: a 3-hop chain of worst-case bypasses (~9.4 min each) far
+  // exceeds Discord's 15-min interaction token — cut cleanly and report.
+  const deadline = Date.now() + 13 * 60_000;
   for (let hop = 1; hop <= CHAIN_MAX_HOPS; hop++) {
+    if (Date.now() > deadline) {
+      finalError = new Error('13-min interaction limit reached — the chain got cut here; re-run /bx chain from the last hop');
+      break;
+    }
     let result = null;
     const cached = cacheGet(url);
     if (cached) {

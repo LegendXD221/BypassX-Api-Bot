@@ -36,7 +36,12 @@ function sendJson(res, code, body, extraHeaders = {}) {
 }
 
 function sendHtml(res, code, html) {
-  res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+  res.writeHead(code, {
+    'content-type': 'text/html; charset=utf-8',
+    'cache-control': 'no-store',
+    'referrer-policy': 'no-referrer',
+    'x-content-type-options': 'nosniff',
+  });
   res.end(html);
 }
 
@@ -142,8 +147,13 @@ function reqId(v, name) {
 }
 
 function reqText(v, name, max = 1900) {
-  const s = String(v ?? '').trim();
-  if (!s) throw new Error(`${name} is required`);
+  const s = String(v ?? '');
+  // VERBATIM passthrough: `.trim()` used to strip leading/trailing blank
+  // lines — real content for ```diff```/quote compositions. The trimmed
+  // copy is used only for the required-check and the length check (the
+  // length check on the raw string is the safe direction: UTF-16 length
+  // >= code points, so it can never under-count Discord's cap).
+  if (!s.trim()) throw new Error(`${name} is required`);
   if (s.length > max) throw new Error(`${name} too long (max ${max})`);
   return s;
 }
@@ -618,8 +628,19 @@ export const ACTIONS = {
 
   async sql_query({ query }) {
     const sql = String(query ?? '').trim();
-    if (!/^(select|with|show|explain|table)\b/i.test(sql) || /;.*(insert|update|delete|drop|alter|truncate|create)/i.test(sql)) {
+    if (!/^(select|with|show|explain|table)\b/i.test(sql)) {
       throw new Error('read-only enforced — only SELECT/WITH/SHOW/EXPLAIN/TABLE');
+    }
+    if (sql.includes(';')) {
+      throw new Error('read-only enforced — single statement only (no ;)');
+    }
+    // The old guard only scanned AFTER a ';' — `WITH d AS (DELETE …) SELECT`
+    // sailed through. The data-modifying keyword must appear literally
+    // somewhere in the statement, so scan the WHOLE string. Owner-gated
+    // tool: a false positive (a column named "created") just errors and the
+    // owner rephrases — a false negative used to destroy data.
+    if (/\b(delete|insert|update|drop|alter|truncate|create|grant|revoke|copy|vacuum|call|do|listen|notify|reindex|cluster|comment|lock|move|fetch|refresh|import|security|procedure|function)\b/i.test(sql.replace(/^\s*(with|select|show|explain|table)\b/i, ''))) {
+      throw new Error('read-only enforced — data-modifying statements are rejected');
     }
     const res = await store.rawQuery(sql);
     const rows = res?.rows ?? [];

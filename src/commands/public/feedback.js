@@ -46,6 +46,10 @@ export default {
     // Persist first — DM delivery is best-effort on top.
     store.appendFeedback(entry);
 
+    // Defer BEFORE the owner DM loop: N × (users.fetch + DM) is network I/O
+    // that can easily blow the 3s ack window.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
     let delivered = 0;
     for (const id of config.ownerIds) {
       const owner = await interaction.client.users.fetch(id).catch(() => null);
@@ -62,8 +66,7 @@ export default {
       }
     }
 
-    return interaction.reply({
-      flags: V2 | MessageFlags.Ephemeral,
+    return interaction.editReply({
       components: [
         card({
           accent: config.colors.success,

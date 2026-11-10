@@ -705,10 +705,14 @@ async function subReboot(interaction) {
 
 async function subSql(interaction) {
   const query = String(interaction.options.getString('query', true)).trim();
-  if (!/^(select|with|show|explain|table)\b/i.test(query) || /;.*(insert|update|delete|drop|alter|truncate|create)/i.test(query)) {
+  // Full-string keyword scan — the old after-';' scan let
+  // `WITH d AS (DELETE …) SELECT` straight through.
+  const startsReadOnly = /^(select|with|show|explain|table)\b/i.test(query);
+  const hasModifier = /\b(delete|insert|update|drop|alter|truncate|create|grant|revoke|copy|vacuum|call|do|listen|notify|reindex|cluster|comment|lock|move|fetch|refresh|import|security|procedure|function)\b/i.test(query.replace(/^\s*(with|select|show|explain|table)\b/i, ''));
+  if (!startsReadOnly || hasModifier || query.includes(';')) {
     return interaction.reply({
       flags: V2 | MessageFlags.Ephemeral,
-      components: [errorContainer({ title: 'Read-only enforced', description: 'Only `SELECT` / `WITH` / `SHOW` / `EXPLAIN` / `TABLE` queries run here.' })],
+      components: [errorContainer({ title: 'Read-only enforced', description: 'Only single-statement `SELECT` / `WITH` / `SHOW` / `EXPLAIN` / `TABLE` queries run here — no data-modifying keywords.' })],
     });
   }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });

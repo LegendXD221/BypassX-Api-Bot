@@ -165,8 +165,9 @@ function esc(s){ return String(s==null?'':s); }
 
 function api(path, opts){
   opts = opts || {};
-  opts.headers = Object.assign({'content-type':'application/json'}, opts.headers||{});
-  return fetch('/dashboard/api/'+path+'?token='+encodeURIComponent(TOKEN), opts).then(function(r){
+  opts.headers = Object.assign({'content-type':'application/json','authorization':'Bearer '+TOKEN}, opts.headers||{});
+  // Token rides the Authorization header — query strings land in proxy logs.
+  return fetch('/dashboard/api/'+path, opts).then(function(r){
     return r.json().catch(function(){ return {}; }).then(function(j){
       if(!r.ok) throw new Error((j && j.error) || ('HTTP '+r.status));
       return j;
@@ -493,7 +494,12 @@ function wireToggles(){
     runAction('set_status', {status: this.value}, null, false);
   };
   $('#refreshBtn').onclick = function(){ loadOverview(true); };
-  $('#export').onclick = function(){ window.open('/dashboard/api/export.json?token='+encodeURIComponent(TOKEN),'_blank'); };
+  $('#export').onclick = function(){
+    fetch('/dashboard/api/export.json', { headers: { 'authorization': 'Bearer '+TOKEN } })
+      .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.blob(); })
+      .then(function(b){ var u=URL.createObjectURL(b); var a=document.createElement('a'); a.href=u; a.download='bypassx-logs.json'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(u); }, 5000); })
+      .catch(function(e){ out('export failed: '+e.message, 'err'); });
+  };
   $('#logout').onclick = function(){ location.replace('/dashboard'); };
 }
 
@@ -526,6 +532,7 @@ const FAVICON =
 const HEAD = (title) => `<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
 <link rel="icon" href="${FAVICON}">
 <title>${title}</title>`;
 

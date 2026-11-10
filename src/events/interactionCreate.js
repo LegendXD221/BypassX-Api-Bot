@@ -16,6 +16,26 @@ export async function onInteraction(interaction) {
     if (interaction.isModalSubmit()) return await handleModal(interaction);
   } catch (e) {
     log.err('Interaction handler error:', e);
+    // Buttons/modals used to die here with no user-visible answer — the
+    // click just dead-ended ("interaction failed"). Mirror the command
+    // error-reply: followUp when already answered, reply otherwise.
+    try {
+      const payload = {
+        flags: wrapV2,
+        components: [
+          errorContainer({
+            title: 'Something went wrong',
+            description: `\`\`\`\n${truncate(String(e?.message ?? e), 500)}\n\`\`\``,
+          }),
+        ],
+      };
+      if (interaction.isRepliable()) {
+        if (interaction.replied || interaction.deferred) await interaction.followUp(payload).catch(() => {});
+        else await interaction.reply({ ...payload, flags: payload.flags | 64 }).catch(() => {});
+      }
+    } catch {
+      /* interaction expired — nothing more we can do */
+    }
   }
 }
 

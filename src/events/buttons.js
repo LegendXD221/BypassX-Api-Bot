@@ -34,6 +34,14 @@ export async function handleButton(interaction) {
   if (id.startsWith('bxretry:')) return handleRetry(interaction);
   if (id.startsWith('bxoauth:')) return handleOauthButton(interaction);
   if (id.startsWith('bxpoll:')) return handlePollButton(interaction);
+  // Unknown/stale customIds got silently ignored — the user clicked and
+  // nothing happened, no "expired" hint. Answer ephemeral once.
+  return interaction
+    .reply({
+      flags: V2 | MessageFlags.Ephemeral,
+      components: [errorContainer({ title: 'Expired', description: 'This button is no longer active — run the command again for a fresh one.' })],
+    })
+    .catch(() => {});
 }
 
 /* ---------------- Mobile / PC copy ---------------- */
@@ -55,12 +63,12 @@ async function handleCopy(interaction) {
     return interaction.reply({
       content: String(t.url).slice(0, 1990),
       flags: MessageFlags.Ephemeral,
-    });
+    }).catch(() => {});
   }
   return interaction.reply({
     flags: V2 | MessageFlags.Ephemeral,
     components: [copyContainer({ url: t.url, mode })],
-  });
+  }).catch(() => {});
 }
 
 /* ---------------- /recent rerun buttons ---------------- */
@@ -122,7 +130,7 @@ async function handleServicesNav(interaction) {
       }),
     ],
     flags: V2,
-  });
+  }).catch(() => {});
 }
 
 /* ---------------- Retry ---------------- */

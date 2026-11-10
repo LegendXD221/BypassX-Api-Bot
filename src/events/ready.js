@@ -6,6 +6,19 @@ import { refreshSupported } from '../api.js';
 import { startApiWatchdog } from '../watchdog.js';
 import { cleanupTokens } from '../tokens.js';
 
+/**
+ * Interval stacking guard: every dashboard gateway restart logs a NEW client
+ * whose ClientReady re-runs this function. Without the guard below each
+ * restart used to double the watchdog/refresh/cleanup intervals and leave
+ * the old presence rotation calling setActivity on a destroyed client (one
+ * rejection per tick, forever).
+ */
+const started = {
+  watchdog: false,
+  registry: false,
+  tokenCleanup: false,
+};
+
 export async function onReady(client) {
   log.ok(`Logged in as ${client.user.tag} (${client.user.id}) — ${client.guilds.cache.size} guild(s)`);
   if (client.autobypassDisabled) {
@@ -15,11 +28,20 @@ export async function onReady(client) {
   await registerCommands(client);
 
   startPresenceRotation(client);
-  startApiWatchdog();
+  if (!started.watchdog) {
+    started.watchdog = true;
+    startApiWatchdog();
+  }
 
-  refreshSupported(true);
-  setInterval(() => refreshSupported(), 6 * 3600_000).unref();
-  setInterval(cleanupTokens, 5 * 60_000).unref();
+  if (!started.registry) {
+    started.registry = true;
+    refreshSupported(true);
+    setInterval(() => refreshSupported(), 6 * 3600_000).unref();
+  }
+  if (!started.tokenCleanup) {
+    started.tokenCleanup = true;
+    setInterval(cleanupTokens, 5 * 60_000).unref();
+  }
 }
 
 async function registerCommands(client) {
@@ -44,14 +66,30 @@ async function registerCommands(client) {
 /* Rotating presence (owner can override via /owner presence)          */
 /* ------------------------------------------------------------------ */
 
+/** Singleton rotation: a dashboard restart destroys the old client, so the
+ *  old timer must be CLEARED and a fresh one must bind to the new client —
+ *  never two rotations at once, never setActivity on the dead client. */
+let activeRotation = null;
+
 function startPresenceRotation(client) {
+  if (activeRotation) clearInterval(activeRotation);
   const templates = () => [
     { type: ActivityType.Watching, name: 'links get bypassed' },
     { type: ActivityType.Listening, name: `${client.guilds.cache.size} server${client.guilds.cache.size === 1 ? '' : 's'}` },
     { type: ActivityType.Playing, name: 'BypassX Api ⚡' },
   ];
   let i = 0;
-  const apply = () => client.user.setActivity(templates()[i++ % templates().length]);
+  const apply = () => {
+    // The client can be destroyed by a dashboard restart between ticks —
+    // setActivity on a destroyed user throws and used to repeat forever.
+    if (!client.user) return;
+    try {
+      client.user.setActivity(templates()[i++ % templates().length]);
+    } catch {
+      /* destroyed client — the next restart's onReady replaces this timer */
+    }
+  };
   apply();
-  setInterval(apply, 2 * 60_000).unref();
+  activeRotation = setInterval(apply, 2 * 60_000);
+  activeRotation.unref();
 }

@@ -22,6 +22,12 @@ const BASE_INTENTS = [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
 let client = null;
 let activeIntents = FULL_INTENTS;
 
+// Crash-proofing FIRST — a rejection inside onReady/presence/DB init fires
+// BEFORE the end-of-main registration used to run, and the Node default for
+// an unhandled rejection is process death (the "silent zombie" outage class).
+process.on('unhandledRejection', (e) => log.err('Unhandled rejection:', e));
+process.on('uncaughtException', (e) => log.err('Uncaught exception:', e));
+
 function buildClient(intents) {
   const client = new Client({ intents, partials: [Partials.Message, Partials.Channel] });
   client.commands = commands;
@@ -70,12 +76,18 @@ function startHealthServer(ctx) {
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
     if (url.pathname === '/health' || url.pathname.startsWith('/health')) {
-      res.writeHead(200, { 'content-type': 'application/json' });
+      // Truthful health: a dead/null gateway must NOT answer ok:true —
+      // Render and the self-ping would otherwise babysit a zombie that
+      // accepts no interactions (the 8h-outage shape, silent form).
+      const c = ctx.getClient();
+      const gatewayReady = Boolean(c && typeof c.isReady === 'function' && c.isReady());
+      res.writeHead(gatewayReady ? 200 : 503, { 'content-type': 'application/json' });
       res.end(
         JSON.stringify({
-          ok: true,
+          ok: gatewayReady,
           uptime: Math.floor(process.uptime()),
-          guilds: ctx.getClient()?.guilds?.cache?.size ?? null,
+          guilds: c?.guilds?.cache?.size ?? null,
+          ws: c?.ws?.status ?? null,
           ts: Date.now(),
         })
       );
@@ -149,16 +161,17 @@ async function main() {
   });
 
   // Render free web services spin down after inactivity — ping ourselves so
-  // the bot stays online 24/7.
+  // the bot stays online 24/7. Bounded: a hung self-ping must not leave a
+  // dangling request forever.
   const externalUrl = process.env.RENDER_EXTERNAL_URL;
   if (externalUrl) {
     const url = `${externalUrl.replace(/\/+$/, '')}/health`;
-    setInterval(() => fetch(url).catch(() => {}), 5 * 60_000).unref();
+    setInterval(
+      () => fetch(url, { signal: AbortSignal.timeout(10_000) }).catch(() => {}),
+      5 * 60_000
+    ).unref();
     log.info(`Keep-alive self-ping enabled → ${url}`);
   }
-
-  process.on('unhandledRejection', (e) => log.err('Unhandled rejection:', e));
-  process.on('uncaughtException', (e) => log.err('Uncaught exception:', e));
 
   for (const sig of ['SIGINT', 'SIGTERM']) {
     process.on(sig, gracefulShutdown);

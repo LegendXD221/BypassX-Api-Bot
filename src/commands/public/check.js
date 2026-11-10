@@ -32,12 +32,13 @@ export default {
       });
     }
 
-    await refreshSupported();
+    // Defer before the registry refresh (up to 10s on a cold cache) — the
+    // invalid-URL reply above is instant and stays a direct reply.
+    await interaction.deferReply();
     const svc = matchService(url.href);
 
     if (!svc) {
-      return interaction.reply({
-        flags: V2,
+      return interaction.editReply({
         components: [
           card({
             accent: config.colors.warning,
@@ -54,8 +55,7 @@ export default {
     }
 
     const domains = (svc.domains ?? []).slice(0, 6);
-    return interaction.reply({
-      flags: V2,
+    return interaction.editReply({
       components: [
         card({
           accent: config.colors.success,

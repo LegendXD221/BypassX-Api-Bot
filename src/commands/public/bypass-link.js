@@ -44,7 +44,10 @@ export default {
       });
     }
 
-    await refreshSupported();
+    // Bound the registry refresh: a cold cache can take 10s and blow the 3s
+    // ack window ("interaction failed"). Cached registries resolve instantly;
+    // a cold one gets 2.5s and matchService falls back to urls[0] anyway.
+    await Promise.race([refreshSupported(), new Promise((r) => setTimeout(r, 2500))]);
     const target = urls.find((u) => matchService(u)) ?? urls[0];
 
     return runBypass({ interaction, url: target, source: 'message' });

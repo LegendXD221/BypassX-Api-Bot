@@ -2,6 +2,7 @@ import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { config } from '../../config.js';
 import { V2, card, errorContainer } from '../../components.js';
 import { kvTable, codeBlock, cut, diffBlock, diffFail } from '../../format.js';
+import { isBlockedHost } from '../../util.js';
 
 /* ------------------------------------------------------------------ */
 /* /tools — network & web intelligence                                 */
@@ -160,7 +161,12 @@ const deferP = (interaction) => interaction.deferReply();
 const isUrl = (raw) => {
   try {
     const u = new URL(raw);
-    return u.protocol === 'http:' || u.protocol === 'https:' ? u : null;
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    // Same SSRF wall the bypass path uses — without it /tools headers,
+    // urlstatus and unshort fetched localhost/metadata/internal hosts and
+    // printed the answers (headers included set-cookie) back to the user.
+    if (isBlockedHost(u.hostname)) return null;
+    return u;
   } catch {
     return null;
   }

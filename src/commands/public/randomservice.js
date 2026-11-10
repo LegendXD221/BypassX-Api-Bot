@@ -12,19 +12,19 @@ export default {
   meta: { cooldownMs: 3000 },
 
   async execute(interaction) {
+    // Defer FIRST — refreshSupported() can take 10s on a cold registry.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     await refreshSupported();
     const list = supported.services ?? [];
     if (!list.length) {
-      return interaction.reply({
-        flags: V2 | MessageFlags.Ephemeral,
+      return interaction.editReply({
         components: [
           card({ emoji: '🎲', title: 'Registry is empty', body: ['The service registry is not loaded yet — try again in a minute.'] }),
         ],
       });
     }
     const svc = list[Math.floor(Math.random() * list.length)];
-    return interaction.reply({
-      flags: V2 | MessageFlags.Ephemeral,
+    return interaction.editReply({
       components: [
         card({
           accent: 0x818cf8,

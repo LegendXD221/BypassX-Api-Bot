@@ -7,6 +7,13 @@ dotenv.config({ override: true });
  * Central configuration — everything comes from the environment so no
  * secret ever needs to live in the repo. See .env.example.
  */
+// Loud boot warning: if OWNER_IDS is unset, ownership (eval, SQL, reboot,
+// dashboard-equivalent bans) silently accrues to the fallback ID below.
+// It stays for zero-config dev, but the operator must SEE it.
+if (!process.env.OWNER_IDS) {
+  console.warn('[config] OWNER_IDS is not set — falling back to the hardcoded owner ID. Set OWNER_IDS in your environment.');
+}
+
 export const config = {
   version: '2.2.0',
 

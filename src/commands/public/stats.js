@@ -13,7 +13,9 @@ export default {
   meta: { cooldownMs: 3000 },
 
   async execute(interaction) {
-    await refreshSupported();
+    // Defer FIRST — refreshSupported() can take 10s on a cold registry and
+    // Discord kills un-acked interactions at 3s ("interaction failed").
+    await interaction.deferReply();
     const c = store.counters;
     const db = await store.publicStats();
     const ageMin = supported.fetchedAt ? Math.round((Date.now() - supported.fetchedAt) / 60000) : null;
@@ -59,7 +61,7 @@ export default {
       `**BypassX API**\n${supported.count || '—'} services · ${supported.domainCount || '—'} domains${ageMin != null ? ` · refreshed ${ageMin} min ago` : ''}${config.apiKey ? '' : '\n⚠️ No API key configured — bypasses are offline'}`
     );
 
-    await interaction.reply({
+    await interaction.editReply({
       flags: V2,
       components: [card({ emoji: '📊', title: 'Bot Statistics', body })],
     });

@@ -11,6 +11,8 @@ export default {
   meta: { cooldownMs: 3000 },
 
   async execute(interaction) {
+    // Defer FIRST — guild stats hit the database (cold start > 3s).
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const guild = interaction.guild;
     const channels = store.autobypassChannels(guild.id);
     const stats = await store.guildStats(guild.id);
@@ -25,8 +27,7 @@ export default {
         : '**Bypass activity**\nNo database history for this server yet.',
     ];
 
-    await interaction.reply({
-      flags: V2 | MessageFlags.Ephemeral,
+    await interaction.editReply({
       components: [card({ emoji: '🏰', title: 'Server Overview', subtitle: guild.name, body })],
     });
   },

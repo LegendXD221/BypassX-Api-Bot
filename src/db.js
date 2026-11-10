@@ -29,6 +29,9 @@ let driver = 'tcp'; // 'tcp' = node-postgres · 'ws' = Neon serverless over HTTP
 let dbOk = false;
 let reconnectTimer = null;
 
+// Real TLS verification for the Postgres link (a MITM used to be able to
+// intercept credentials/queries). If a CA chain genuinely fails, the
+// symmetric transport switch below falls to Neon's HTTPS driver loudly.
 function getPool() {
   if (!pool) {
     if (driver === 'tcp') {
@@ -37,7 +40,7 @@ function getPool() {
         max: 4,
         connectionTimeoutMillis: 5_000,
         idleTimeoutMillis: 30_000,
-        ssl: { rejectUnauthorized: false },
+        ssl: { rejectUnauthorized: true },
         application_name: 'bypassx-api-bot',
       });
     } else {
@@ -49,6 +52,26 @@ function getPool() {
     pool.on('error', (e) => log.warn(`db pool error: ${e.message}`));
   }
   return pool;
+}
+
+/** Never let a postgres connection string leak through an error message. */
+function scrubConn(msg) {
+  return String(msg ?? '').replace(/postgres(?:ql)?:\/\/[^\s]+/gi, 'postgres://<redacted>');
+}
+
+/** Single-flight transport switch: two concurrent failing q() calls used to
+ *  both flip the driver and shutdownDb() each other's fresh pool (churn
+ *  exactly during an outage). All callers now await the same switch. */
+let switchInFlight = null;
+function switchTransport(to, from, reason) {
+  if (!switchInFlight) {
+    switchInFlight = (async () => {
+      driver = to;
+      log.warn(`postgres ${from} transport failing (${reason}) — switching to ${to === 'ws' ? 'Neon WebSocket transport (HTTPS/443)' : 'raw TCP transport'}`);
+      await shutdownDb();
+    })().finally(() => { switchInFlight = null; });
+  }
+  return switchInFlight;
 }
 
 async function q(text, params = []) {
@@ -73,9 +96,7 @@ async function q(text, params = []) {
     if (transportLike) {
       const other = driver === 'tcp' ? 'ws' : 'tcp';
       const from = driver;
-      driver = other;
-      log.warn(`postgres ${from} transport failing (${e.code || e.message || 'unknown'}) — switching to ${other === 'ws' ? 'Neon WebSocket transport (HTTPS/443)' : 'raw TCP transport'}`);
-      await shutdownDb();
+      await switchTransport(other, from, e.code || scrubConn(e.message) || 'unknown');
       try {
         const res = await getPool().query(text, params);
         dbOk = true;
@@ -86,14 +107,17 @@ async function q(text, params = []) {
         // Both transports failed THIS call. Flip back so the next attempt
         // (60s reconnect loop or the next caller) starts from the transport
         // that worked most recently instead of the one that just died.
-        driver = from;
-        await shutdownDb();
-        log.warn(`db query failed (${other}): ${e2.message} — continuing memory-only`);
+        await switchTransport(from, other, scrubConn(e2.message));
+        log.warn(`db query failed (${other}): ${scrubConn(e2.message)} — continuing memory-only`);
         scheduleReconnect();
         return null;
       }
     }
-    if (dbOk) log.warn(`db query failed: ${e.message} — continuing memory-only`);
+    // Real SQL error (syntax/constraint) — it carries `severity`; log it.
+    // The old condition (`if (dbOk)`) was dead code: dbOk is always false
+    // here, so genuine SQL failures vanished silently while memory diverged
+    // from disk. Scrub connection strings from the message while at it.
+    log.warn(`db query failed: ${scrubConn(e.message)} — continuing memory-only`);
     scheduleReconnect();
     return null;
   }
@@ -179,7 +203,11 @@ export async function initDb() {
     return false;
   }
   await Promise.all([refreshAutobypass(), refreshBlacklist(), refreshCounters(), store.loadCooldownOverrides()]);
-  log.ok(`Neon Postgres ready — ${config.databaseUrl.split('@')[1]?.split('/')[0] ?? 'database'} (pool max 4)`);
+  // URL parsing (split('@') lands mid-password when the password contains @)
+  const dbHost = (() => {
+    try { return new URL(config.databaseUrl).host || 'database'; } catch { return 'database'; }
+  })();
+  log.ok(`Neon Postgres ready — ${dbHost} (pool max 4)`);
   return true;
 }
 
@@ -417,7 +445,9 @@ export const store = {
   },
 
   async recentLogs({ userId = null, guildId = null, limit = 10 } = {}) {
-    const cap = Math.min(Math.max(1, limit), 25);
+    // 25 for the in-app cards; the dashboard export asks for 1000 and used
+    // to silently receive 25 — allow up to 1000 explicitly.
+    const cap = Math.min(Math.max(1, limit), 1000);
     let res;
     if (userId) res = await q('SELECT * FROM bypass_logs WHERE user_id=$1 ORDER BY id DESC LIMIT $2', [userId, cap]);
     else if (guildId) res = await q('SELECT * FROM bypass_logs WHERE guild_id=$1 ORDER BY id DESC LIMIT $2', [guildId, cap]);

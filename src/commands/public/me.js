@@ -11,6 +11,8 @@ export default {
   meta: { cooldownMs: 3000 },
 
   async execute(interaction) {
+    // Defer FIRST — a Neon cold start can blow the 3s ack window.
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     const stats = await store.userStats(interaction.user.id);
 
     const body = stats
@@ -28,8 +30,7 @@ export default {
           '-# History needs the database connection to be online; check `/stats` for bot-wide numbers.',
         ];
 
-    await interaction.reply({
-      flags: V2 | MessageFlags.Ephemeral,
+    await interaction.editReply({
       components: [card({ emoji: '👤', title: `Your stats — ${interaction.user.username}`, body })],
     });
   },
