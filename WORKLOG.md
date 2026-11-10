@@ -39,9 +39,13 @@ Honest running log of decisions, changes and incidents. Newest first.
 - SMOKE: expectations updated — `preview_diff` asserted ABSENT (registry +
   palette), textarea builder markers asserted PRESENT, action floor now
   `55 owner actions`. 16/16 groups green.
-- SHIPPED: image rebuilt (with the correct `app/` tar root + export-verify
-  gate from the outage postmortem), deployed, boot verified — see dashboard
-  live check in the deploy entry.
+- SHIPPED: image digest `sha256:0cdfa983…` (export-verified BEFORE deploy:
+  app/src/* + deps present, preview_diff absent, textarea builder present,
+  entrypoint node /app/src/index.js) → deploy dep-dbpdabgn74is73dkt2l0
+  (clearCache=clear) → live in ~30s. Fresh boot `08:26:34 BypassX Api v2.2.0
+  starting…`; /health HTTP 200, uptime 72s → 175s → 360s+ with zero restarts;
+  keep-alive self-ping ON. Owner can now type multi-line formatted messages
+  in the dashboard palette and Discord renders them verbatim.
 
 ---
 
