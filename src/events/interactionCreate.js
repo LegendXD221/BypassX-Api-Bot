@@ -91,7 +91,7 @@ async function handleCommand(interaction) {
 
   try {
     // Per-command usage counter — feeds /commands and the owner dashboard.
-    store.bump(`cmd:${interaction.commandName}`).catch?.(() => {});
+    store.bump(`cmd:${interaction.commandName}`)?.catch(() => {});
     await cmd.execute(interaction);
   } catch (e) {
     log.err(`/${interaction.commandName} failed:`, e);

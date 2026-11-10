@@ -4,6 +4,44 @@ Honest running log of decisions, changes and incidents. Newest first.
 
 ---
 
+## 2026-11-10 (evening) — `.catch?.` typo: EVERY slash command threw "Cannot read properties of undefined (reading 'catch')" — fixed
+
+- ASK: user screenshot (#bumper, 10:52 AM) — `/bypass` by KnightPlayz answered the
+  owner error card `⚠️ Something went wrong` with
+  `Cannot read properties of undefined (reading 'catch')` · v2.2.0.
+- DIAGNOSIS (full `.catch(` audit of all 81 call sites, then repro):
+  - The error card is emitted by `onInteraction`'s `handleCommand` catch — the
+    throw happened BEFORE `cmd.execute()` even ran.
+  - Root cause, `src/events/interactionCreate.js:94`:
+    `store.bump(...).catch?.(() => {})`. `store.bump()` is synchronous and
+    returns `undefined`, so the member access `undefined.catch` itself throws.
+    The optional-call `?.` sat on the CALL side (`catch?.()`) — it never guards
+    the property ACCESS. Correct shape: `?.catch(() => {})`.
+  - Introduced in v2.0.0 (4fbe896). Never surfaced before because v2.0.0–v2.1.x
+    code only went live yesterday with the v2.2.0 image (service ran the stale
+    v1.5.0 image until then) — first real-world slash command since the typo
+    shipped was this screenshot. Verified with a 3-line node repro: the old
+    form throws exactly this message, the fixed form does not.
+  - Impact: EVERY slash command failed with this card since the v2.2.0 deploy;
+    auto-bypass (messageCreate) was unaffected — which is why the bot still
+    "worked" in armed channels.
+  - Sibling scan: `rg '\.catch\?\.'` → this was the only occurrence repo-wide;
+    pattern scan for `).prop?.(` misuse → none. The other 80 `.catch(` sites
+    hang off real promises (async fns, discord.js builders, `q()` which is
+    async and always returns a promise even when resolving `null`).
+- FIX: line 94 → `store.bump(...)?.catch(() => {})` — preserves the defensive
+  optional-catch intent, no throw when bump returns undefined.
+- VERIFICATION: `node --check` clean; runtime self-test of the exact call form
+  (memory-only store) does not throw; `npm run smoke` 16/16 groups green
+  (42 top-level / 131 invokable unchanged).
+- SANDBOX NOTE: the workspace was recycled mid-task; bot repo re-cloned from
+  GitHub, deploy tooling restored from /tmp. Live runtime re-confirmed via
+  Render API: image runtime, `ghcr.io/legendxd221/bypassx-deobf-bot:api-bot`.
+- SHIPPED: image rebuilt from this commit and deployed — see next entry if
+  present; verification = boot banner v2.2.0 + `/bypass` no longer errors.
+
+---
+
 ## 2026-11-10 (later) — STALE-IMAGE INCIDENT fixed: service switched back to repo runtime (v2.2.0 ships for real)
 
 - ASK: "The Bot Is Showing Errros Fix It Do Scan Of The Code".
