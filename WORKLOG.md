@@ -80,6 +80,14 @@ Honest running log of decisions, changes and incidents. Newest first.
     idle compute and an always-on ping would burn the monthly compute
     budget — surviving suspends is the correct posture.
   - 16/16 smoke groups green.
+- **SHIPPED + VERIFIED LIVE** (image digest 9daa0847…, deploy
+  dep-dbp9o2e1egvs73bg8mcg): dashboard overview at t+30s AND t+2min —
+  `version 2.2.0 · 42 top-level / 131 invokables · 1 guild (1117 members,
+  auto-leave GONE) · db.healthy TRUE (stays true) · flags {maintenance,
+  disabledCommands} only (minGuildMembers flag gone) · apiHealth 200 /
+  not degraded · test_api action → HTTP 200 reachable · /health ok`.
+  All three owner asks landed: auto-leave removed, bot errors fixed
+  (50035 button guard + db wedge), code scanned end-to-end.
 
 ---
 
