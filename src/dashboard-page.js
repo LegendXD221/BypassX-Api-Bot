@@ -4,9 +4,10 @@
  * every API call. All untrusted strings render through textContent — no XSS.
  *
  * v2: brand-red BypassX identity, sidebar navigation (Overview · Guilds ·
- * Actions · Commands · Logs · Config), searchable 55+ action palette with
- * category chips, per-command usage table, format-preview runner and a
- * sticky console drawer.
+ * Actions · Commands · Logs · Config), searchable action palette with
+ * category chips, per-command usage table and a sticky console drawer.
+ * Messaging actions take multi-line textareas — type ```diff```/markdown
+ * freely; Discord renders it verbatim.
  */
 
 const CSS = `
@@ -212,7 +213,6 @@ var GROUPS = [
    {id:'broadcast_guild', desc:'Message a guild system channel', args:[['guildId','guild ID'],['message','message']]},
    {id:'dm_guild_owner', desc:'DM the owner of a guild', args:[['guildId','guild ID'],['message','message']]},
    {id:'fetch_message', desc:'Read any message by ID', args:[['channelId','channel ID'],['messageId','message ID']]},
-   {id:'preview_diff', desc:'Send the format-preview card (diff/ansi demo) to a channel', args:[['channelId','channel ID']]},
  ]},
  {name:'Guilds', color:'#818cf8', acts:[
    {id:'guild_details', desc:'Full guild snapshot (JSON)', args:[['guildId','guild ID']]},
@@ -259,7 +259,7 @@ var GROUPS = [
    {id:'disable_command', desc:'Turn a command off', args:[['command','command name']]},
    {id:'enable_command', desc:'Turn a command back on', args:[['command','command name']]},
  ]},
- {name:'Data · API · Formats', color:'#38bdf8', acts:[
+ {name:'Data · API', color:'#38bdf8', acts:[
    {id:'bypass_url', desc:'Run a bypass right from the console', args:[['url','https://… gated link']]},
    {id:'clear_cache', desc:'Drop every cached result', args:[]},
    {id:'refresh_services', desc:'Reload the service registry from the API', args:[]},
@@ -302,9 +302,12 @@ function buildPalette(){
       box.appendChild(el('div','desc',a.desc||''));
       var f = el('form'); f.onsubmit=function(ev){ev.preventDefault();};
       var args={};
+      // multi-line content args get a real textarea so formats type naturally
+      // (diff/ansi code fences, **bold**, newlines) — Discord renders them verbatim.
+      var TA = { message:1, json:1, text:1, lines:1, code:1, query:1, reason:1 };
       (a.args||[]).forEach(function(inp){
         var key=inp[0], ph=inp[1], def=inp[2];
-        var i=document.createElement('input');
+        var i=document.createElement(TA[key] ? 'textarea' : 'input');
         i.placeholder=ph||key; if(def) i.value=def;
         i.oninput=function(){ args[key]=i.value; };
         f.appendChild(i);

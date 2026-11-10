@@ -141,7 +141,7 @@ function reqId(v, name) {
   return s;
 }
 
-function reqText(v, name, max = 1500) {
+function reqText(v, name, max = 1900) {
   const s = String(v ?? '').trim();
   if (!s) throw new Error(`${name} is required`);
   if (s.length > max) throw new Error(`${name} too long (max ${max})`);
@@ -660,30 +660,6 @@ export const ACTIONS = {
     );
   },
 
-  /* ---------------- format preview ---------------- */
-
-  async preview_diff({ channelId }, ctx) {
-    const client = needClient(ctx);
-    const ch = await client.channels.fetch(reqId(channelId, 'channelId'));
-    if (!ch?.send) throw new Error('channel not found or not text-based');
-    const { V2 } = await import('./components.js');
-    const { card } = await import('./components.js');
-    await ch.send({
-      flags: V2,
-      components: [
-        card({
-          emoji: '🎨',
-          title: 'Format preview',
-          body: [
-            diffBlock({ info: ['live formats'], add: ['boostylink fixed', 'every result lands like this'], del: ['failures render red'], warn: ['warnings render orange'] }),
-            statusPanel([['gateway', 'connected', 'ok'], ['formats', 'diff · ansi · json · ml', 'info']], { title: 'PREVIEW' }),
-          ],
-        }),
-      ],
-      allowedMentions: { parse: [] },
-    });
-    return `format preview delivered to **#${ch.name ?? channelId}** — check it in Discord`;
-  },
 };
 
 export function actionNames() {

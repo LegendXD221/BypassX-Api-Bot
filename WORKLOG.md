@@ -4,6 +4,47 @@ Honest running log of decisions, changes and incidents. Newest first.
 
 ---
 
+## 2026-11-10 (night) — "Formats" demo removed; dashboard messaging now renders owner-typed formats (multi-line textareas + verbatim passthrough)
+
+- ASK: "Remove the Formats i didnt said to implement them i wanted them so
+  when i send msg using Dashboard in formats so it works / No errors and
+  bugs are accepted".
+- READING: the owner never asked for a Formats demo — what they want is that
+  a message typed in the DASHBOARD (channel_send / dm_user / broadcast_all /
+  broadcast_guild) renders in Discord with the formats they type (```diff```
+  fences, **bold**, newlines).
+- REMOVED (the unprompted part):
+  - `preview_diff` dashboard action ("Send the format-preview card (diff/ansi
+    demo)") — gone from the registry AND the palette. Bonus: it was calling
+    `statusPanel()` which was never imported in dashboard.js — the action
+    would have thrown ReferenceError on invocation. Two bugs, one delete.
+  - Palette group renamed `Data · API · Formats` → `Data · API` (the name
+    was the only "Formats" branding left); page docstring updated.
+- FIXED (the wanted part):
+  - Palette arg inputs were single-line `<input>`s — a multi-line ```diff```
+    fence was literally impossible to type. Content args (`message`, `json`,
+    `text`, `lines`, `code`, `query`, `reason`) now render as real
+    `<textarea>`s (resize, multi-line).
+  - Server-side passthrough verified, not assumed: functional test drives
+    `ACTIONS.channel_send` through a mocked client with a message containing
+    a ```diff fence + bold + newlines — `ch.send` receives it VERBATIM
+    (Discord renders content markdown natively; `allowedMentions:{parse:[]}`
+    preserved, so pings stay off while formats work).
+  - `reqText` cap raised 1500 → 1900 (Discord content cap 2000) so formatted
+    messages aren't rejected at 1500.
+  - Self-inflicted, caught by `node --check` before commit: a ```triple-
+    backtick``` inside a JS comment terminated the `const JS = \`…\`` page
+    template in dashboard-page.js — SyntaxError. Rephrased the comment; the
+    pre-deploy syntax gate did its job.
+- SMOKE: expectations updated — `preview_diff` asserted ABSENT (registry +
+  palette), textarea builder markers asserted PRESENT, action floor now
+  `55 owner actions`. 16/16 groups green.
+- SHIPPED: image rebuilt (with the correct `app/` tar root + export-verify
+  gate from the outage postmortem), deployed, boot verified — see dashboard
+  live check in the deploy entry.
+
+---
+
 ## 2026-11-10 (evening) — `.catch?.` typo: EVERY slash command threw "Cannot read properties of undefined (reading 'catch')" — fixed
 
 - ASK: user screenshot (#bumper, 10:52 AM) — `/bypass` by KnightPlayz answered the

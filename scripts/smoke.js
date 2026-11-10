@@ -395,7 +395,7 @@ for (const a of [
   'guild_roles', 'guild_emojis', 'guild_invites', 'guild_bans', 'guild_members', 'member_info',
   'member_kick', 'member_ban', 'member_timeout', 'create_channel', 'delete_channel',
   'create_role', 'delete_role', 'set_status', 'reload_commands', 'dump_env',
-  'sql_query', 'bypass_url', 'feedback_list', 'feedback_clear', 'command_counts', 'preview_diff',
+  'sql_query', 'bypass_url', 'feedback_list', 'feedback_clear', 'command_counts',
 ]) {
   assert.equal(typeof dash.ACTIONS[a], 'function', `v2 action exists: ${a}`);
 }
@@ -419,6 +419,13 @@ for (const marker of ['tab-overview', 'tab-guilds', 'tab-actions', 'tab-commands
 // every registered action id must appear in the palette UI metadata
 for (const a of dash.actionNames()) {
   assert.ok(dashHtml.includes(`'${a}'`) || dashHtml.includes(`"${a}"`), `palette lists action: ${a}`);
+}
+// the unprompted format-preview demo action stays removed (owner ask 2026-11-10)
+assert.equal(dash.ACTIONS.preview_diff, undefined, 'preview_diff removed from the registry');
+assert.ok(!dashHtml.includes("'preview_diff'"), 'palette no longer lists preview_diff');
+// messaging actions are multi-line textareas so owner-typed formats (```diff```) work
+for (const marker of ["TA = { message:1, json:1, text:1", "createElement(TA[key] ? 'textarea' : 'input')"]) {
+  assert.ok(dashHtml.includes(marker), `multi-line format input support in palette: ${marker}`);
 }
 
 // Route/auth behaviour with mocked req/res.
