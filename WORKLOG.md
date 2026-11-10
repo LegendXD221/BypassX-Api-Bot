@@ -57,6 +57,29 @@ Honest running log of decisions, changes and incidents. Newest first.
     a count note; ≤5 safe links still get buttons.
   - Smoke regression: >512 fixture → no style-5 button anywhere on the card;
     16/16 groups green.
+- **DB WEDGE FIX — one-way transport failover**: post-deploy, the dashboard
+  reported `db.healthy: false` persistently (90s+ of polls) despite "Neon
+  Postgres ready" at boot. Live forensics THROUGH the owner dashboard's
+  eval_js action (scope: client/config/store):
+  - direct `pg` TCP connect from inside the bot: `SELECT 1` in ~1s ✓ (URL,
+    credentials, egress, Neon state all fine)
+  - `@neondatabase/serverless` Pool with `webSocketConstructor: ws`:
+    **fails in 1ms — "All attempts to open a WebSocket … fetch failed"** —
+    the neon WS transport is BROKEN on this Render runtime (it worked
+    elsewhere; that's how it got into the code).
+  - ROOT CAUSE: `q()`'s failover was ONE-WAY (tcp→ws). A query hitting the
+    5s TCP timeout during a Neon free-tier cold-start (compute suspends
+    after ~5 idle minutes) flipped the bot onto the broken WS path, and the
+    60s reconnect loop then retried `q('SELECT 1')` on the SAME dead driver
+    forever — memory-only until restart.
+  - FIX in `src/db.js`: failover is now SYMMETRIC — tcp↔ws flips on any
+    transport-like failure (added `fetch failed` to the matcher), and when
+    BOTH transports fail in one call the driver flips BACK to the one that
+    worked most recently, so the 60s reconnect always starts from the best
+    known transport. No DB keep-alive on purpose: Neon free tier suspends
+    idle compute and an always-on ping would burn the monthly compute
+    budget — surviving suspends is the correct posture.
+  - 16/16 smoke groups green.
 
 ---
 

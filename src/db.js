@@ -59,25 +59,36 @@ async function q(text, params = []) {
     return res;
   } catch (e) {
     dbOk = false;
-    // Transport-level TCP failure (blocked port, refused, timeout) → switch to
-    // the Neon WebSocket transport over HTTPS/443 and retry once. Real SQL
-    // errors (syntax, constraints — they carry `severity`) never trigger this.
+    // Transport-level failure (blocked port, refused, timeout, dead websocket)
+    // → switch transports and retry once. Real SQL errors (syntax, constraints
+    // — they carry `severity`) never trigger this. The switch is SYMMETRIC:
+    // tcp→ws on TCP trouble, and ws→tcp again when the WebSocket path dies
+    // (live-verified on Render: the neon WS transport can hard-fail there —
+    // "fetch failed" in 1ms — while raw TCP keeps working; a one-way switch
+    // wedged the bot memory-only forever).
     const transportLike =
       !e.severity ||
       ['ECONNREFUSED', 'ETIMEDOUT', 'ECONNRESET', 'ENOTFOUND', 'EAI_AGAIN', 'ERR_SOCKET_CONNECTION_TIMEOUT'].includes(e.code) ||
-      /timeout|terminated|connect/i.test(String(e.message ?? ''));
-    if (driver === 'tcp' && transportLike) {
-      driver = 'ws';
-      log.warn(`postgres TCP transport failing (${e.code || e.message || 'unknown'}) — switching to Neon WebSocket transport (HTTPS/443)`);
+      /timeout|terminated|connect|fetch failed/i.test(String(e.message ?? ''));
+    if (transportLike) {
+      const other = driver === 'tcp' ? 'ws' : 'tcp';
+      const from = driver;
+      driver = other;
+      log.warn(`postgres ${from} transport failing (${e.code || e.message || 'unknown'}) — switching to ${other === 'ws' ? 'Neon WebSocket transport (HTTPS/443)' : 'raw TCP transport'}`);
       await shutdownDb();
       try {
         const res = await getPool().query(text, params);
         dbOk = true;
-        log.ok('Database connected over WebSocket transport.');
+        log.ok(`Database connected over ${other === 'ws' ? 'WebSocket' : 'raw TCP'} transport.`);
         scheduleReconnect();
         return res;
       } catch (e2) {
-        log.warn(`db query failed (ws): ${e2.message} — continuing memory-only`);
+        // Both transports failed THIS call. Flip back so the next attempt
+        // (60s reconnect loop or the next caller) starts from the transport
+        // that worked most recently instead of the one that just died.
+        driver = from;
+        await shutdownDb();
+        log.warn(`db query failed (${other}): ${e2.message} — continuing memory-only`);
         scheduleReconnect();
         return null;
       }
