@@ -563,3 +563,73 @@ surface entirely, and ship v1.2.0.
   >= 100), owner 23 subcommands, 57 dashboard actions + danger set, v2 UI
   markers + every action id present in the palette, poll button router,
   catalog categories. 16 check groups ALL GREEN.
+
+## 2026-11-10 — THE BIGGEST SCAN (bot half): no interaction dead-ends, next-outage class closed, verbatim dashboard send
+
+- ASK: biggest scan of all services, no bugs accepted. The website half is in
+  the BypassXWebsite worklog (first-win race, deadline clamps, API lockdown,
+  live-fire 6/6). This entry = the Api-Bot half (static audit findings fixed,
+  image digest 25d28d5c… deployed as dep-dbpjhirm8hqs73e3ei50, /health
+  truthful + stable, 5 guilds).
+- ACK DISCIPLINE — the "interaction failed" killer is closed: 10 commands did
+  slow I/O BEFORE their first reply (10s registry refresh, Neon cold-start DB
+  reads, owner-DM loops) and blew Discord's 3s window exactly when the
+  service was degraded. stats/check/services/randomservice/recent/me/
+  serverinfo/feedback/bx-last defer first now (ephemeral where the result was
+  ephemeral, public where it was public); bypass-link bounds its registry
+  refresh at 2.5s and runBypass skips its defer when already deferred (no
+  double-defer, public result stays public).
+- CRASH-SAFETY — the next 8h-outage class: process handlers now registered
+  FIRST in main() (a rejection inside onReady/presence used to fire before
+  the end-of-main registration with no handler = default process death);
+  /health lies no more (ok:true only when the gateway is READY, new `ws`
+  field, 503 otherwise — Render keep-alive and the self-ping can no longer
+  babysit a silent zombie); dashboard gateway restarts no longer stack
+  watchdog/registry/token-cleanup intervals nor leave the old presence
+  rotation calling setActivity on the destroyed client (singleton rotation,
+  guarded start flags, per-tick try); self-ping bounded (10s abort).
+- AUTO-BYPASS — failed URLs are un-marked now (the old mark-before-call
+  blackholed a URL for the whole 10-min TTL: no ❌, no retry, silently
+  dropped while /recent showed the failure); oauth results render through
+  oauthContainer (the generic container read result.url=undefined → "Key
+  Generated" card with an EMPTY diff block and copy buttons literally
+  containing "undefined"); only `kind === "destination"` results are cached
+  (a cached oauth action was a stale handoff on replay).
+- /bx chain + batch: 13-min deadline — a worst-case chain (3 hops x ~9.4min
+  bypass each) exceeded Discord's 15-min interaction token; the final
+  editReply threw "Unknown interaction" and the user sat on the
+  "chain-bypassing…" placeholder forever. Clean cut + partial report now.
+- DASHBOARD SEND-MESSAGE IS VERBATIM: reqText's `.trim()` silently stripped
+  leading/trailing blank lines — real content in ```diff```/quote
+  compositions. Trim now applies only to the required/length checks; the
+  delivered content is untouched (1900 UTF-16 cap can never under-count
+  Discord's 2000 code points). Multi-line textareas + fences verified.
+- SECURITY: sql_query (dashboard + /owner sql) — the after-';' regex guard
+  was bypassable with `WITH d AS (DELETE …) SELECT …` (no ';' before the
+  DELETE) → real data destruction from the "read-only" console; now a
+  full-string data-modifying keyword scan + single-statement rule. Dashboard
+  token moved to the Authorization header (query strings land in Render
+  request logs forever) + no-referrer on HTML; export.json fetched via
+  header + blob download (and actually exports 1000 rows — the 25-row clamp
+  made the button a lie). tools headers/urlstatus/unshort now run through
+  isBlockedHost (users could make the bot fetch localhost/metadata/internal
+  hosts and print headers incl. set-cookie back). Postgres TLS verification
+  ON. Real SQL errors logged (the `if (dbOk)` warn condition was dead code —
+  genuine SQL failures vanished) with connection strings scrubbed from all
+  db error paths; initDb logs a URL-parsed host (split('@') broke on
+  passwords containing @). Transport switching is single-flight (two
+  concurrent failures used to shutdownDb each other's fresh pool). Button
+  tokens are CSPRNG now (seq + Math.random was guessable in-channel, and
+  copy tokens had no owner check). OWNER_IDS-unset boots with a loud warning.
+- BUTTONS/MODALS: any handler throw now answers the user (outer-catch
+  reply/followUp fallback mirroring command dispatch); every reply/update is
+  .catch-guarded; unknown customIds get an honest "expired" card instead of
+  dead silence.
+- companion/bypassx-companion.user.js added to this repo (v2, 328 lines) —
+  the website's /companion page installs from GitHub raw since Safe Browsing
+  blocks on-domain .user.js hosting; the crowd-learning loop is alive again.
+- TESTS: smoke 16/16 (42 top-level / 131 invokables) · bx-offline 3/3 ·
+  tools harness 25/25 · node --check every file. IMAGE: digest
+  sha256:25d28d5c… export-verified before deploy (patch markers grepped
+  in-image: unhandledRejection-first, VERBATIM passthrough, scrubConn,
+  started.watchdog; layer scoped to /app; sources node --check clean).
