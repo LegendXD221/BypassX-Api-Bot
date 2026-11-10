@@ -4,6 +4,34 @@ Honest running log of decisions, changes and incidents. Newest first.
 
 ---
 
+## 2026-11-10 (later) — STALE-IMAGE INCIDENT fixed: service switched back to repo runtime (v2.2.0 ships for real)
+
+- ASK: "The Bot Is Showing Errros Fix It Do Scan Of The Code".
+- DIAGNOSIS (Render logs + GET /services/{id}):
+  - The service was STILL on the 2026-11-08 outage workaround: image runtime,
+    `ghcr.io/legendxd221/bypassx-deobf-bot:api-bot` — an image last built from
+    **v1.5.0-era code**. Boot banner: `BypassX Api v1.5.0 starting…`,
+    `Registered 21 global application commands` (current main registers 42),
+    `Loaded 49 services / 87 domains`. Every v1.6→v2.1 feature (100+ commands,
+    dashboard v3, format engine) AND the auto-leave removal never went live.
+  - Newest log entry: a Discord REST rejection of a Components-V2 message
+    (`flags: 32768`) from that old code — the "errors" the owner saw.
+  - git push to GitHub never ships: image-runtime services re-pull the IMAGE,
+    not the repo. The 2026-11-09/10 pushes were silently inert.
+  - `render_deploy_bot.py` (tarball-boot variant) was a dead iteration: its
+    dockerCommand can't be set via API on image runtimes (recorded earlier).
+- FIX: the 2026-11-08 Render repo-validation outage is long over →
+  `PATCH /v1/services/{id}` switched the service back to the **repo runtime**
+  (Node, `npm install` → `npm start`, health check `/health`). This also
+  re-arms `autoDeploy: yes` / `autoDeployTrigger: commit` — every push to
+  `main` now ships by itself again (no image rebuild dance).
+- VERSION MARKER: config/package bumped 2.0.0 → **2.2.0** (v2.1.0 was tagged
+  upstream but never deployed; the boot banner now proves which code runs).
+- DEPLOY TRIGGER NOTE: the owner's deploy script was updated to always
+  trigger a fresh deploy + env-sync (drops the dead MIN_GUILD_MEMBERS var).
+
+---
+
 ## 2026-11-10 — auto-leave policy removed (bot stays in every server)
 
 - ASK: "Remove the bot feature where it leaves servers that has less than
