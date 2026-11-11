@@ -4,6 +4,39 @@ Honest running log of decisions, changes and incidents. Newest first.
 
 ---
 
+## 2026-11-11 — Spin-down outage root-caused; external keep-alive net added (keepalive.yml)
+
+- REPORT: "make the Discord bot online it got offline" — bot unreachable on
+  Discord, no user-facing errors.
+- ROOT CAUSE (verified, not guessed): Render free-tier idle spin-down. The
+  instance had been spun down and nothing external could wake it — the bot's
+  own 5-min self-ping died WITH the process, so a silent spin-down latches
+  until the first inbound request. `GET /health` on the public URL showed
+  `uptime:17` (fresh boot from MY request) — proof of the latch, not a
+  crash-loop (crash-loops don't show spin-down latches and Render had no
+  failed-deploy / suspend state: `not_suspended`, deploy `live`).
+- RECOVERY: one `curl /health` woke the instance; gateway reached
+  `client.isReady()` (health endpoint enforces `ok:true` only on a ready
+  gateway — the 8h-outage "zombie babysit" shape is structurally excluded).
+  Confirmed via health polls: uptime 17s -> 91s -> 171s -> 487s with gateway
+  ready and 8 guilds cached.
+- PREVENTION (3 layers, in addition to the existing self-ping):
+  1. `.github/workflows/keepalive.yml` — external `/health` ping every
+     10 min (< 15-min spin-down window), 4 attempts x 60s so a cold boot +
+     slow gateway still passes; run exits non-zero (visible red run) if the
+     gateway never becomes ready. Manually dispatched once -> success.
+  2. Daily agent health-check (09:00 IST): `bot_daily_check.py` self-heals
+     (wake -> re-poll -> resume if suspended -> redeploy as last resort) and
+     stays silent unless it ends up STILL DOWN.
+  3. Existing in-process self-ping (unchanged — was never broken; it just
+     can't run while the process is dead).
+- OPS NOTE: Render's logs API now 400s on the old `serverId`/`serviceId`
+  filter paths from the compiled helper — log inspection during this outage
+  was done via health probes + service/deploys endpoints instead. Helper
+  `fetch_logs` will need the new filter schema next time it matters.
+- VERIFY: GH Actions "Keep-alive ping" run #1 = success (external proof of
+  gateway-ready), CI green on the workflow commit; `/health` 200 ok:true.
+
 ## 2026-11-10 (night) — "Formats" demo removed; dashboard messaging now renders owner-typed formats (multi-line textareas + verbatim passthrough)
 
 - ASK: "Remove the Formats i didnt said to implement them i wanted them so
