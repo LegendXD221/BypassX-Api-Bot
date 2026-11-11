@@ -4,6 +4,67 @@ Honest running log of decisions, changes and incidents. Newest first.
 
 ---
 
+## 2026-11-11 (later) — Dashboard v4 OPS edition: Op Tools arsenal (44 new owner-only ops, 99 total), UI overhaul
+
+- ASK: "Lets Move On The Bot Dashboard — The Dashboard Ui Still Looks Little
+  Bad Improve It And Add More Dashboard Only Features create a section Named
+  Op Tools And Add like 50+ Op And Powerful commands in it like role giving
+  bot owner in server and more features" + "Bot Owner Only".
+- OWNER-ONLY POSTURE (unchanged in kind, hardened in framing): the whole
+  dashboard stays behind DASHBOARD_TOKEN (timing-safe compare, disabled
+  entirely when unset); every Op Tools run is written to the bot log
+  (`dashboard action: op_*`); destructive ops additionally sit in the
+  danger set and ask twice (UI confirm + server-side confirm:true gate).
+- 44 NEW ACTIONS (src/dashboard.js, the OP TOOLS section — 99 total now):
+  * Roles (12): op_role_give / op_role_remove (hierarchy-guarded — refuses
+    roles at/above the bot's peak), op_role_give_all / op_role_remove_all
+    (mass, humans-or-bots filter, 1000 cap + accounting), rename / color /
+    info (permission list) / members / position / clone, plus create_role /
+    delete_role surfaced in the section.
+  * Members (11): unban, timeout_clear, nickname set/reset, voice
+    move/disconnect, permission audit (critical flags flagged), mass-DM
+    humans (capped 25 default / 50 max, 600ms pacing), kick/ban/timeout/
+    member_info surfaced.
+  * Channels (12): rename, topic, slowmode (0-21600s), LOCK/UNLOCK
+    (@everyone SendMessages overwrite), NSFW flag, clone, category move
+    ("none" = root), create category, channel info JSON, create/delete.
+  * Messages (10): purge (1-100, old-message filtered), purge_user (scoped
+    fetch + filter), delete by ID, edit (MY messages only — honest error
+    otherwise), react, pin/unpin, send/embed/fetch surfaced.
+  * Server (12): rename server, icon, banner (boost-gated error surfaced),
+    emoji upload (v14.28 options-object create) / delete, webhooks list,
+    audit-log tail with executors, vanity invite + uses, invite create,
+    bans/emojis/invites lists.
+  * Power (12): per-guild instant slash-command sync, bot permission audit
+    (guild + optional channel overrides), broadcast_all, dm_user, eval_js,
+    sql_query, reload_commands, toggle_autobypass, set_maintenance, dump_env,
+    reconnect_gateway, shutdown.
+- GUARDS (all server-side, tested): hierarchy checks before every role
+  mutation; reqId digit-format on every ID; mass ops capped + paced; danger
+  set grew 11 → 19 (role_give_all, role_remove_all, dm_all_guild,
+  purge_messages, purge_user, delete_message, emoji_delete, guild_name_set
+  added); guild.client.user.id replaced with the canonical ctx client ref
+  (the functional test caught the fragility).
+- UI v4 OPS (src/dashboard-page.js):
+  * Sidebar reorganized into GENERAL / OPERATIONS groups; new Op tools nav
+    with ⚡ icon + gradient OWNER badge; version → "Owner Console v4 OPS".
+  * Dedicated Op Tools tab: amber/red gradient banner with the BOT OWNER
+    ONLY tag, sticky search + group filter ("69 of 69 actions" counter),
+    six op group cards (Roles/Members/Channels/Messages/Server/Power).
+  * The old Actions tab stays as the full 99-action registry ("Full action
+    registry") — palette builder refactored into one parameterized
+    renderPalette() powering both tabs; danger ops keep red left rails, op
+    boxes get amber rails, focus-within glow, focus-visible rings.
+- TESTS: scripts/test_op_tools.mjs — 53 functional checks through the real
+  dispatch() with a mocked discord.js client (Collection-based): confirm
+  gates, hierarchy refusals, mass-op accounting, purge scoping, voice
+  branches, emoji options-object, honest-failure paths. npm run smoke
+  extended to pin v4 + the full op arsenal (16 groups green).
+- DEPLOY: GHCR image rebuild via scripts/build_bot_image.sh (export-verify
+  gate PASS) → Render auto-deploy on digest change → /health ok:true.
+
+---
+
 ## 2026-11-11 — Spin-down outage root-caused; external keep-alive net added (keepalive.yml)
 
 - REPORT: "make the Discord bot online it got offline" — bot unreachable on

@@ -158,6 +158,38 @@ function reqText(v, name, max = 1900) {
   return s;
 }
 
+/* ---- op-tools resolvers (shared by the OP TOOLS arsenal) ---- */
+
+function needGuild(ctx, guildId) {
+  const g = needClient(ctx).guilds.cache.get(reqId(guildId, 'guildId'));
+  if (!g) throw new Error('guild not found');
+  return g;
+}
+
+async function needMember(g, userId) {
+  const m = await g.members.fetch(reqId(userId, 'userId')).catch(() => null);
+  if (!m) throw new Error('member not found in that guild');
+  return m;
+}
+
+function needRole(g, roleId) {
+  const r = g.roles.cache.get(reqId(roleId, 'roleId'));
+  if (!r) throw new Error('role not found in that guild');
+  return r;
+}
+
+/** Hierarchy guard — I can never assign/edit a role at or above my peak. */
+function guardRoleHierarchy(g, role) {
+  const me = g.members.me;
+  if (me && role.position >= me.roles.highest.position) {
+    throw new Error(`role **${role.name}** is at/above my highest role — move my role higher first`);
+  }
+}
+
+function needGuildChannel(ctx, channelId) {
+  return needClient(ctx).channels.fetch(reqId(channelId, 'channelId'));
+}
+
 export const ACTIONS = {
   /* ---------------- messaging ---------------- */
   async dm_user({ userId, message }, ctx) {
@@ -681,6 +713,475 @@ export const ACTIONS = {
     );
   },
 
+
+  /* ═════════════════════════════════════════════════════════════════
+     OP TOOLS — bot-owner-only server operations arsenal.
+     Everything below is reachable ONLY through the token-gated owner
+     dashboard (DASHBOARD_TOKEN, timing-safe compare) and every run is
+     written to the bot log. Hierarchy + permission limits are enforced
+     honestly: an op that Discord would refuse errors here first.
+     ═════════════════════════════════════════════════════════════════ */
+
+  /* ---------------- op · roles ---------------- */
+
+  async op_role_give({ guildId, userId, roleId, reason }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const role = needRole(g, roleId);
+    guardRoleHierarchy(g, role);
+    const m = await needMember(g, userId);
+    if (m.roles.cache.has(role.id)) return `**${m.user?.tag}** already has **${role.name}**`;
+    await m.roles.add(role.id, reason ? reqText(reason, 'reason', 200) : 'op-tools: role grant');
+    return `gave **${role.name}** to **${m.user?.tag}** in **${g.name}**`;
+  },
+
+  async op_role_remove({ guildId, userId, roleId, reason }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const role = needRole(g, roleId);
+    guardRoleHierarchy(g, role);
+    const m = await needMember(g, userId);
+    if (!m.roles.cache.has(role.id)) return `**${m.user?.tag}** doesn't have **${role.name}**`;
+    await m.roles.remove(role.id, reason ? reqText(reason, 'reason', 200) : 'op-tools: role revoke');
+    return `removed **${role.name}** from **${m.user?.tag}** in **${g.name}**`;
+  },
+
+  async op_role_give_all({ guildId, roleId, includeBots }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const role = needRole(g, roleId);
+    guardRoleHierarchy(g, role);
+    await g.members.fetch().catch(() => {});
+    const bots = String(includeBots ?? 'false').toLowerCase() === 'true';
+    const targets = [...g.members.cache.values()].filter(
+      (m) => !m.roles.cache.has(role.id) && (bots || !m.user?.bot)
+    );
+    if (!targets.length) return `everyone eligible already holds **${role.name}**`;
+    let added = 0;
+    let failed = 0;
+    for (const m of targets.slice(0, 1000)) {
+      const ok = await m.roles.add(role.id, 'op-tools: mass role grant').then(() => true).catch(() => false);
+      ok ? added++ : failed++;
+    }
+    return `mass grant → **${added}** got **${role.name}**, ${failed} failed (${targets.length} eligible${bots ? ', bots included' : ' humans only'})`;
+  },
+
+  async op_role_remove_all({ guildId, roleId }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const role = needRole(g, roleId);
+    guardRoleHierarchy(g, role);
+    await g.members.fetch().catch(() => {});
+    const targets = [...g.members.cache.values()].filter((m) => m.roles.cache.has(role.id));
+    if (!targets.length) return `nobody holds **${role.name}**`;
+    let removed = 0;
+    let failed = 0;
+    for (const m of targets.slice(0, 1000)) {
+      const ok = await m.roles.remove(role.id, 'op-tools: mass role revoke').then(() => true).catch(() => false);
+      ok ? removed++ : failed++;
+    }
+    return `mass revoke → **${removed}** lost **${role.name}**, ${failed} failed (${targets.length} holders)`;
+  },
+
+  async op_role_rename({ guildId, roleId, name }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const role = needRole(g, roleId);
+    guardRoleHierarchy(g, role);
+    const old = role.name;
+    await role.setName(reqText(name, 'name', 90), 'op-tools: rename');
+    return `role **${old}** renamed → **${role.name}**`;
+  },
+
+  async op_role_color({ guildId, roleId, color }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const role = needRole(g, roleId);
+    guardRoleHierarchy(g, role);
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(color ?? '').trim());
+    if (!m) throw new Error('color must be a hex code like #ef2b2b');
+    await role.setColor(parseInt(m[1], 16), 'op-tools: recolor');
+    return `role **${role.name}** recolored → **#${m[1].toLowerCase()}**`;
+  },
+
+  async op_role_info({ guildId, roleId }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const role = needRole(g, roleId);
+    const perms = role.permissions?.toArray?.() ?? [];
+    return [
+      `**${role.name}** — \`${role.id}\``,
+      `color \`${role.hexColor}\` · position **${role.position}** · hoisted: ${role.hoist ? 'yes' : 'no'} · mentionable: ${role.mentionable ? 'yes' : 'no'}`,
+      `members: **${role.members?.size ?? '?'}** · created <t:${Math.floor(role.createdTimestamp / 1000)}:R>`,
+      perms.length ? `permissions (${perms.length}): ${perms.slice(0, 24).join(', ')}${perms.length > 24 ? ' …' : ''}` : 'permissions: none',
+    ].join('\n');
+  },
+
+  async op_role_members({ guildId, roleId }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const role = needRole(g, roleId);
+    await g.members.fetch().catch(() => {});
+    const list = role.members
+      .sort((a, b) => (b.joinedTimestamp ?? 0) - (a.joinedTimestamp ?? 0))
+      .first(30)
+      .map((m) => `**${m.user?.tag ?? m.id}**${m.user?.bot ? ' 🤖' : ''}`);
+    return `**${role.name}** — ${role.members.size} holder(s):\n${list.join('\n') || 'none'}`;
+  },
+
+  async op_role_position({ guildId, roleId, position }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const role = needRole(g, roleId);
+    guardRoleHierarchy(g, role);
+    const pos = Math.max(1, Number(position) || 1);
+    await role.setPosition(pos, 'op-tools: reposition');
+    return `role **${role.name}** moved to position **${role.position}**`;
+  },
+
+  async op_role_clone({ guildId, roleId, name }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const role = needRole(g, roleId);
+    guardRoleHierarchy(g, role);
+    const clone = await role.clone({
+      name: name ? reqText(name, 'name', 90) : `${role.name} copy`,
+      reason: 'op-tools: clone',
+    });
+    return `cloned **${role.name}** → **${clone.name}** (same color + permissions)`;
+  },
+
+  /* ---------------- op · members ---------------- */
+
+  async op_member_unban({ guildId, userId, reason }, ctx) {
+    const g = needGuild(ctx, guildId);
+    await g.bans.remove(reqId(userId, 'userId'), reason ? reqText(reason, 'reason', 200) : 'op-tools: unban').catch((e) => {
+      throw new Error(`unban failed (${String(e?.message ?? e).slice(0, 120)}) — user may not be banned`);
+    });
+    return `unbanned \`${userId}\` in **${g.name}**`;
+  },
+
+  async op_member_timeout_clear({ guildId, userId }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const m = await needMember(g, userId);
+    await m.timeout(null, 'op-tools: timeout cleared');
+    return `timeout cleared for **${m.user?.tag}**`;
+  },
+
+  async op_member_nickname({ guildId, userId, nickname }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const m = await needMember(g, userId);
+    const old = m.nickname ?? m.displayName;
+    await m.setNickname(reqText(nickname, 'nickname', 32), 'op-tools: nickname');
+    return `**${m.user?.tag}** nickname: "${old}" → "**${m.nickname}**"`;
+  },
+
+  async op_member_nickname_reset({ guildId, userId }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const m = await needMember(g, userId);
+    await m.setNickname(null, 'op-tools: nickname reset');
+    return `**${m.user?.tag}** nickname reset (now **${m.displayName}**)`;
+  },
+
+  async op_member_voice_move({ guildId, userId, channelId }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const m = await needMember(g, userId);
+    const target = String(channelId ?? '').trim();
+    if (!m.voice?.channel) throw new Error(`**${m.user?.tag}** is not connected to any voice channel`);
+    if (/^(disconnect|kick|null)$/i.test(target)) {
+      await m.voice.disconnect('op-tools: voice disconnect');
+      return `disconnected **${m.user?.tag}** from **${m.voice.channel?.name ?? 'voice'}**`;
+    }
+    const ch = await needGuildChannel(ctx, target);
+    if (ch.type !== ChannelType.GuildVoice && ch.type !== ChannelType.GuildStageVoice) {
+      throw new Error('target channel is not a voice/stage channel');
+    }
+    await m.voice.setChannel(ch, 'op-tools: voice move');
+    return `moved **${m.user?.tag}** → 🔊 **${ch.name}**`;
+  },
+
+  async op_member_permissions({ guildId, userId }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const m = await needMember(g, userId);
+    const perms = m.permissions.toArray();
+    const critical = ['Administrator', 'ManageGuild', 'ManageRoles', 'ManageChannels', 'KickMembers', 'BanMembers', 'ModerateMembers', 'ManageWebhooks'];
+    const held = critical.filter((p) => perms.includes(p));
+    return [
+      `**${m.user?.tag}** in **${g.name}** — ${perms.length} permission(s)`,
+      held.length ? `⚠️ critical: **${held.join('**, **')}**` : 'no critical permissions',
+      `roles: ${m.roles.cache.filter((r) => r.id !== g.id).map((r) => r.name).slice(0, 12).join(', ') || 'none'}`,
+    ].join('\n');
+  },
+
+  async op_dm_all_guild({ guildId, message, cap }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const text = reqText(message, 'message');
+    await g.members.fetch().catch(() => {});
+    const max = Math.min(50, Math.max(1, Number(cap) || 25));
+    const meId = needClient(ctx).user.id;
+    const targets = [...g.members.cache.values()].filter((m) => !m.user?.bot && m.id !== meId).slice(0, max);
+    if (!targets.length) return 'no human members to DM';
+    let sent = 0;
+    let failed = 0;
+    for (const m of targets) {
+      const ok = await m.send({ content: text, allowedMentions: { parse: [] } }).then(() => true).catch(() => false);
+      ok ? sent++ : failed++;
+      await new Promise((r) => setTimeout(r, 600)); // gentle pace — DM spam filters
+    }
+    return `guild DM run → **${sent}** delivered, ${failed} failed (${targets.length} attempted, 600ms pacing)`;
+  },
+
+  /* ---------------- op · channels ---------------- */
+
+  async op_channel_rename({ channelId, name }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    if (!ch?.setName) throw new Error('channel not found or not renamable');
+    const old = ch.name;
+    await ch.setName(reqText(name, 'name', 90), 'op-tools: rename');
+    return `channel **#${old}** renamed → **#${ch.name}**`;
+  },
+
+  async op_channel_topic({ channelId, topic }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    if (!ch?.setTopic) throw new Error('channel is not text-based');
+    await ch.setTopic(String(topic ?? '').slice(0, 1020) || null, 'op-tools: topic');
+    return `topic set on **#${ch.name}**`;
+  },
+
+  async op_channel_slowmode({ channelId, seconds }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    if (!ch?.setRateLimitPerUser) throw new Error('channel is not text-based');
+    const sec = Math.max(0, Math.min(21600, Number(seconds) || 0));
+    await ch.setRateLimitPerUser(sec, 'op-tools: slowmode');
+    return sec === 0 ? `slowmode OFF on **#${ch.name}**` : `slowmode **${sec}s** on **#${ch.name}**`;
+  },
+
+  async op_channel_lock({ channelId }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    if (!ch?.permissionOverwrites) throw new Error('channel not found');
+    await ch.permissionOverwrites.edit(ch.guild.roles.everyone, { SendMessages: false }, { reason: 'op-tools: lock' });
+    return `🔒 locked **#${ch.name}** — @everyone can no longer send messages`;
+  },
+
+  async op_channel_unlock({ channelId }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    if (!ch?.permissionOverwrites) throw new Error('channel not found');
+    await ch.permissionOverwrites.edit(ch.guild.roles.everyone, { SendMessages: null }, { reason: 'op-tools: unlock' });
+    return `🔓 unlocked **#${ch.name}** — @everyone send permission restored to default`;
+  },
+
+  async op_channel_nsfw({ channelId, enabled }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    if (!ch?.setNSFW) throw new Error('channel is not text-based');
+    const on = String(enabled ?? 'true').toLowerCase() === 'true';
+    await ch.setNSFW(on, 'op-tools: nsfw flag');
+    return `**#${ch.name}** NSFW → **${on ? 'ON' : 'OFF'}**`;
+  },
+
+  async op_channel_clone({ channelId }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    if (!ch?.clone) throw new Error('channel not found or not cloneable');
+    const copy = await ch.clone({ reason: 'op-tools: clone' });
+    return `cloned **#${ch.name}** → **#${copy.name}** (same type, topic, position ${copy.rawPosition})`;
+  },
+
+  async op_channel_category_set({ channelId, categoryId }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    if (!ch?.setParent) throw new Error('channel not found or not categorizable');
+    const target = String(categoryId ?? '').trim();
+    if (/^(none|remove|null|root)$/i.test(target)) {
+      await ch.setParent(null, { lockPermissions: false, reason: 'op-tools: uncategorize' });
+      return `**#${ch.name}** moved out of any category`;
+    }
+    const cat = await needGuildChannel(ctx, target);
+    if (cat.type !== ChannelType.GuildCategory) throw new Error('target is not a category');
+    await ch.setParent(cat.id, { lockPermissions: false, reason: 'op-tools: categorize' });
+    return `**#${ch.name}** moved under **${cat.name}**`;
+  },
+
+  async op_create_category({ guildId, name }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const cat = await g.channels.create({ name: reqText(name, 'name', 90), type: ChannelType.GuildCategory });
+    return `created category **${cat.name}** in **${g.name}**`;
+  },
+
+  async op_channel_info({ channelId }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    if (!ch) throw new Error('channel not found');
+    const info = {
+      id: ch.id,
+      name: ch.name ?? null,
+      type: ChannelType[ch.type] ?? ch.type,
+      guild: ch.guild?.name ?? null,
+      topic: ch.topic ?? null,
+      nsfw: ch.nsfw ?? null,
+      slowmode: ch.rateLimitPerUser ?? null,
+      parentId: ch.parentId ?? null,
+      position: ch.rawPosition ?? null,
+      created: ch.createdTimestamp ? new Date(ch.createdTimestamp).toISOString() : null,
+    };
+    return '```json\n' + JSON.stringify(info, null, 2).slice(0, 1500) + '\n```';
+  },
+
+  /* ---------------- op · messages ---------------- */
+
+  async op_purge_messages({ channelId, count }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    if (!ch?.bulkDelete) throw new Error('channel is not text-based');
+    const n = Math.max(1, Math.min(100, Number(count) || 10));
+    const deleted = await ch.bulkDelete(n, true).catch((e) => {
+      throw new Error(`purge failed (${String(e?.message ?? e).slice(0, 120)}) — messages older than 14 days can't be bulk-deleted`);
+    });
+    return `🧹 purged **${deleted.size}** message(s) from **#${ch.name}**`;
+  },
+
+  async op_purge_user({ channelId, userId, count }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    if (!ch?.bulkDelete) throw new Error('channel is not text-based');
+    const n = Math.max(1, Math.min(50, Number(count) || 10));
+    const recent = await ch.messages.fetch({ limit: 100 }).catch(() => null);
+    if (!recent) throw new Error('could not fetch recent messages');
+    const mine = recent.filter((m) => m.author?.id === reqId(userId, 'userId')).first(n);
+    if (!mine?.length) return `no recent messages from \`${userId}\` in the last 100`;
+    const deleted = await ch.bulkDelete(mine, true).catch(() => null);
+    if (!deleted) return `found ${mine.length} message(s) but all were older than 14 days — cannot bulk-delete`;
+    return `🧹 purged **${deleted.size}** message(s) from \`${userId}\` in **#${ch.name}**`;
+  },
+
+  async op_delete_message({ channelId, messageId }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    const m = await ch?.messages?.delete(reqId(messageId, 'messageId')).catch((e) => {
+      throw new Error(`delete failed (${String(e?.message ?? e).slice(0, 120)})`);
+    });
+    void m;
+    return `deleted message \`${messageId}\` in **#${ch.name}**`;
+  },
+
+  async op_edit_message({ channelId, messageId, content }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    const m = await ch?.messages?.edit(reqId(messageId, 'messageId'), {
+      content: reqText(content, 'content'),
+      allowedMentions: { parse: [] },
+    }).catch((e) => {
+      throw new Error(`edit failed (${String(e?.message ?? e).slice(0, 120)}) — only MY OWN messages are editable`);
+    });
+    return `edited my message in **#${ch.name}** <t:${Math.floor(Date.now() / 1000)}:R>`;
+  },
+
+  async op_react_message({ channelId, messageId, emoji }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    const m = await ch?.messages?.fetch(reqId(messageId, 'messageId'));
+    if (!m) throw new Error('message not found');
+    await m.react(reqText(emoji, 'emoji', 64)).catch((e) => {
+      throw new Error(`react failed (${String(e?.message ?? e).slice(0, 120)}) — emoji may be invalid or from another server`);
+    });
+    return `reacted ${emoji} to a message in **#${ch.name}**`;
+  },
+
+  async op_pin_message({ channelId, messageId }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    const m = await ch?.messages?.pin(reqId(messageId, 'messageId')).catch((e) => {
+      throw new Error(`pin failed (${String(e?.message ?? e).slice(0, 120)}) — channel pin slot may be full (50 max)`);
+    });
+    void m;
+    return `📌 pinned message \`${messageId}\` in **#${ch.name}**`;
+  },
+
+  async op_unpin_message({ channelId, messageId }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    await ch?.messages?.unpin(reqId(messageId, 'messageId')).catch((e) => {
+      throw new Error(`unpin failed (${String(e?.message ?? e).slice(0, 120)})`);
+    });
+    return `📌 unpinned message \`${messageId}\` in **#${ch.name}**`;
+  },
+
+  /* ---------------- op · server ---------------- */
+
+  async op_guild_name_set({ guildId, name }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const old = g.name;
+    await g.setName(reqText(name, 'name', 100), 'op-tools: server rename');
+    return `server **${old}** renamed → **${g.name}**`;
+  },
+
+  async op_guild_icon_set({ guildId, url }, ctx) {
+    const g = needGuild(ctx, guildId);
+    await g.setIcon(reqText(url, 'image url', 500), 'op-tools: icon');
+    return `icon of **${g.name}** updated`;
+  },
+
+  async op_guild_banner_set({ guildId, url }, ctx) {
+    const g = needGuild(ctx, guildId);
+    await g.setBanner(reqText(url, 'image url', 500), 'op-tools: banner').catch((e) => {
+      throw new Error(`banner failed (${String(e?.message ?? e).slice(0, 120)}) — boost level 2 usually required`);
+    });
+    return `banner of **${g.name}** updated`;
+  },
+
+  async op_emoji_add({ guildId, name, url }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const emoji = await g.emojis.create({ attachment: reqText(url, 'image url', 500), name: reqText(name, 'name', 32), reason: 'op-tools: emoji upload' });
+    return `emoji **:${emoji.name}:** uploaded to **${g.name}** (${emoji.id})`;
+  },
+
+  async op_emoji_delete({ guildId, emojiId }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const e = g.emojis.cache.get(reqId(emojiId, 'emojiId'));
+    const name = e?.name ?? emojiId;
+    await g.emojis.delete(reqId(emojiId, 'emojiId'), 'op-tools: emoji delete').catch((e2) => {
+      throw new Error(`emoji delete failed (${String(e2?.message ?? e2).slice(0, 120)})`);
+    });
+    return `emoji **:${name}:** deleted from **${g.name}**`;
+  },
+
+  async op_webhooks_list({ channelId }, ctx) {
+    const ch = await needGuildChannel(ctx, channelId);
+    if (!ch?.fetchWebhooks) throw new Error('channel is not text-based');
+    const hooks = await ch.fetchWebhooks().catch(() => null);
+    if (!hooks) return 'could not fetch webhooks (missing Manage Webhooks)';
+    return `**#${ch.name}** — ${hooks.size} webhook(s):\n${hooks
+      .first(15)
+      .map((w) => `\`${w.id}\` **${w.name}**${w.owner ? ` · by ${w.owner.tag ?? w.owner.name ?? '?'}` : ''}`)
+      .join('\n') || 'none'}`;
+  },
+
+  async op_audit_recent({ guildId, count }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const n = Math.max(1, Math.min(20, Number(count) || 10));
+    const logs = await g.fetchAuditLogs({ limit: n }).catch((e) => {
+      throw new Error(`audit log fetch failed (${String(e?.message ?? e).slice(0, 120)}) — View Audit Log permission required`);
+    });
+    return `**${g.name}** — last ${logs.entries.size} audit entr${logs.entries.size === 1 ? 'y' : 'ies'}:\n${logs.entries
+      .map((e) => `\`${e.actionType}\` **${e.target?.tag ?? e.target?.name ?? e.target?.id ?? '?'}** · by ${e.executor?.tag ?? '?'} · <t:${Math.floor(e.createdTimestamp / 1000)}:R>`)
+      .join('\n') || 'none'}`;
+  },
+
+  async op_guild_vanity({ guildId }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const vanity = await g.fetchVanityData().catch(() => null);
+    if (!vanity?.code) return `**${g.name}** has no vanity invite (or I lack permissions)`;
+    return `vanity invite of **${g.name}**: discord.gg/${vanity.code} — **${vanity.uses ?? 0}** uses`;
+  },
+
+  /* ---------------- op · power ---------------- */
+
+  async op_sync_guild_commands({ guildId }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const { commandData } = await import('./commands/index.js');
+    await g.commands.set(commandData);
+    return `synced **${commandData.length}** slash commands to **${g.name}** (instant — no global propagation wait)`;
+  },
+
+  async op_bot_permissions({ guildId, channelId }, ctx) {
+    const g = needGuild(ctx, guildId);
+    const me = g.members.me;
+    if (!me) throw new Error('my member record is not cached for that guild yet');
+    const perms = me.permissions.toArray();
+    const key = ['Administrator', 'ManageRoles', 'ManageChannels', 'KickMembers', 'BanMembers', 'ModerateMembers', 'ManageWebhooks', 'ManageMessages', 'ViewAuditLog'];
+    const held = key.filter((p) => perms.includes(p));
+    let channelPart = '';
+    if (channelId && String(channelId).trim()) {
+      const ch = await needGuildChannel(ctx, channelId);
+      const over = ch.permissionsFor(me);
+      channelPart = `\nchannel **#${ch.name}**: ${over ? over.toArray().slice(0, 20).join(', ') : 'no overwrites readable'}`;
+    }
+    return [
+      `my powers in **${g.name}** (highest role: **${me.roles.highest?.name ?? '?'}** at position ${me.roles.highest?.position ?? '?'})`,
+      held.length ? `key: **${held.join('**, **')}**` : 'none of the key permissions',
+      `all: ${perms.slice(0, 30).join(', ')}${perms.length > 30 ? ' …' : ''}${channelPart}`,
+    ].join('\n');
+  },
+
 };
 
 export function actionNames() {
@@ -699,9 +1200,19 @@ export const DANGER = new Set([
   'delete_channel',
   'delete_role',
   'feedback_clear',
+  /* op tools — destructive / mass-impact ops */
+  'op_role_give_all',
+  'op_role_remove_all',
+  'op_dm_all_guild',
+  'op_purge_messages',
+  'op_purge_user',
+  'op_delete_message',
+  'op_emoji_delete',
+  'op_guild_name_set',
 ]);
 
-async function dispatch(body, ctx) {
+/** Exported for the offline functional test — callers still need a live ctx. */
+export async function dispatch(body, ctx) {
   const name = String(body?.action ?? '');
   const action = ACTIONS[name];
   if (!action) throw new Error(`unknown action "${name.slice(0, 40)}"`);

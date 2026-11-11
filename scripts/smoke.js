@@ -407,7 +407,7 @@ for (const a of ['member_kick', 'member_ban', 'delete_channel', 'delete_role', '
 
 const page = await import('../src/dashboard-page.js');
 const dashHtml = page.dashboardHtml();
-assert.match(dashHtml, /Owner Console v3/, 'v3 dashboard title');
+assert.match(dashHtml, /Owner Console v4 OPS/, 'v4 ops dashboard title');
 assert.match(dashHtml, /heroStrip/, 'v3 hero strip present');
 assert.match(dashHtml, /Mission Control/, 'v3 hero heading');
 assert.match(dashHtml, /Owner Console/, 'dashboard title');
@@ -415,6 +415,19 @@ assert.match(page.dashboardLoginHtml(), /DASHBOARD_TOKEN/);
 // v2 UI: sidebar tabs + action palette + command usage table + console drawer
 for (const marker of ['tab-overview', 'tab-guilds', 'tab-actions', 'tab-commands', 'tab-logs', 'tab-config', 'actFilter', 'id="commands"', 'id="console"']) {
   assert.ok(dashHtml.includes(marker), `v2 dashboard surface contains: ${marker}`);
+}
+// v4 OP TOOLS: the owner-only operations section ships with the full arsenal
+const opIds = dash.actionNames().filter((n) => n.startsWith('op_'));
+assert.ok(opIds.length >= 44, `op tools arsenal size >= 44 (got ${opIds.length})`);
+for (const a of opIds) {
+  assert.equal(typeof dash.ACTIONS[a], 'function', `op action exists: ${a}`);
+  assert.ok(dashHtml.includes(`'${a}'`), `op palette lists action: ${a}`);
+}
+for (const d of ['op_role_give_all', 'op_role_remove_all', 'op_dm_all_guild', 'op_purge_messages', 'op_purge_user', 'op_delete_message', 'op_emoji_delete', 'op_guild_name_set']) {
+  assert.ok(dash.DANGER.has(d), `op danger-zoned: ${d}`);
+}
+for (const marker of ['tab-optools', 'opbanner', 'BOT OWNER ONLY', 'opFilter', 'opgroups', 'ownerbadge', 'nav-optools']) {
+  assert.ok(dashHtml.includes(marker), `v4 op tools surface contains: ${marker}`);
 }
 // every registered action id must appear in the palette UI metadata
 for (const a of dash.actionNames()) {

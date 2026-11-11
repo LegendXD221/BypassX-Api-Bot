@@ -153,8 +153,31 @@ background:linear-gradient(135deg,#ef2b2b,#8b1020);border:1px solid rgba(239,43,
 .login h1{font-size:17px;margin-bottom:4px}
 .login input{width:100%;margin:16px 0 12px}
 .login button{width:100%}
-@media(max-width:900px){.side{width:64px}.side .brand h1,.side nav button span.lbl,.side .foot{display:none}.side nav button{justify-content:center;padding:11px 0}.main{padding:18px 14px 60px}}
-`;
+/* ---------- v4 ops edition ---------- */
+.side nav .navgrp{font-size:10px;letter-spacing:1.6px;color:var(--mut);opacity:.65;padding:12px 12px 4px;text-transform:uppercase}
+.ownerbadge{font-size:9px;font-weight:800;letter-spacing:1px;background:linear-gradient(135deg,#f59e0b,#ef2b2b);border-radius:5px;padding:1px 6px;color:#fff;margin-left:auto;flex-shrink:0}
+nav button.on .ownerbadge{box-shadow:0 0 12px rgba(239,43,43,.55)}
+nav button.on{font-weight:600}
+.opbanner{display:flex;align-items:center;gap:14px;flex-wrap:wrap;border:1px solid rgba(245,158,11,.4);border-radius:16px;padding:14px 18px;margin-bottom:16px;background:linear-gradient(120deg,rgba(245,158,11,.14),rgba(239,43,43,.12) 60%,transparent),var(--panel);position:relative;overflow:hidden}
+.opbanner::before{content:'';position:absolute;inset:0;background:radial-gradient(500px 140px at 8% -30%,rgba(245,158,11,.25),transparent);pointer-events:none}
+.opbanner .bolt{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:22px;flex-shrink:0;background:linear-gradient(135deg,#f59e0b,#ef2b2b);box-shadow:0 4px 18px rgba(245,158,11,.4),inset 0 1px 0 rgba(255,255,255,.3)}
+.opbanner b{font-size:15px}
+.opbanner .sub{font-size:12px;color:var(--mut);max-width:640px}
+.opbanner .tag{margin-left:auto;font-size:10.5px;font-weight:800;letter-spacing:1.4px;color:#fff;background:linear-gradient(135deg,#f59e0b,#ef2b2b);border-radius:999px;padding:4px 12px;box-shadow:0 2px 10px rgba(239,43,43,.4);white-space:nowrap}
+.pgroup.opcard{border-color:rgba(245,158,11,.22)}
+.pgroup.opcard h3 i{box-shadow:0 0 10px currentColor}
+.actbox.opbox{border-left:2px solid rgba(245,158,11,.5)}
+.actbox.dgrbox{border-left:2px solid rgba(248,113,113,.5)}
+.pal-sticky{position:sticky;top:-10px;z-index:5;background:linear-gradient(180deg,var(--bg) 78%,transparent);padding:4px 0 10px;margin-bottom:4px}
+.card{transition:border-color .18s}
+.card:hover{border-color:rgba(255,255,255,.15)}
+.actbox:focus-within{border-color:rgba(239,43,43,.45)}
+.actbox.opbox:focus-within{border-color:rgba(245,158,11,.55)}
+button.act:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid rgba(239,43,43,.55);outline-offset:1px}
+#out div{border-bottom:1px dashed rgba(255,255,255,.04)}
+#out .t{color:var(--mut);opacity:.75;margin-right:8px}
+@media(max-width:900px){.opbanner .tag{margin-left:0}.opbanner .sub{max-width:100%}}
+`
 
 const JS = `
 var TOKEN = new URLSearchParams(location.search).get('token') || '';
@@ -275,13 +298,13 @@ var GROUPS = [
  ]},
 ];
 
-function buildPalette(){
-  var host = $('#groups');
+function renderPalette(hostId, groups, filterVal, catVal, countEl){
+  var host = $(hostId);
   host.innerHTML='';
-  var filter = ($('#actFilter').value||'').toLowerCase();
-  var cat = $('#actCat').value;
+  var filter = (filterVal||'').toLowerCase();
+  var cat = catVal || 'all';
   var shown = 0;
-  GROUPS.forEach(function(g){
+  groups.forEach(function(g){
     var acts = g.acts.filter(function(a){
       var okCat = cat === 'all' || g.name === cat;
       var okTerm = !filter || a.id.toLowerCase().includes(filter) || (a.desc||'').toLowerCase().includes(filter);
@@ -321,7 +344,102 @@ function buildPalette(){
     });
     host.appendChild(card);
   });
-  $('#actCount').textContent = shown + ' of ' + GROUPS.reduce(function(n,g){return n+g.acts.length},0) + ' actions';
+  if(countEl) $(countEl).textContent = shown + ' of ' + groups.reduce(function(n,g){return n+g.acts.length},0) + ' actions';
+}
+
+function buildPalette(){
+  renderPalette('#groups', GROUPS, $('#actFilter').value, $('#actCat').value, '#actCount');
+}
+
+/* ================================================================ */
+/* OP TOOLS — bot-owner-only operations arsenal (69 commands)        */
+/* ================================================================ */
+var OPTOOLS = [
+ {name:'Roles', color:'#f59e0b', acts:[
+   {id:'op_role_give', desc:'Give a role to a member (hierarchy-checked)', args:[['guildId','guild ID'],['userId','user ID'],['roleId','role ID'],['reason','reason (optional)']]},
+   {id:'op_role_remove', desc:'Remove a role from a member', args:[['guildId','guild ID'],['userId','user ID'],['roleId','role ID'],['reason','reason (optional)']]},
+   {id:'op_role_give_all', danger:1, desc:'MASS grant a role to every eligible member', args:[['guildId','guild ID'],['roleId','role ID'],['includeBots','include bots true/false','false']]},
+   {id:'op_role_remove_all', danger:1, desc:'MASS revoke a role from every holder', args:[['guildId','guild ID'],['roleId','role ID']]},
+   {id:'op_role_rename', desc:'Rename a role', args:[['guildId','guild ID'],['roleId','role ID'],['name','new role name']]},
+   {id:'op_role_color', desc:'Recolor a role (hex)', args:[['guildId','guild ID'],['roleId','role ID'],['color','#ef2b2b']]},
+   {id:'op_role_info', desc:'Role deep-dive (permissions, size, position)', args:[['guildId','guild ID'],['roleId','role ID']]},
+   {id:'op_role_members', desc:'List every holder of a role', args:[['guildId','guild ID'],['roleId','role ID']]},
+   {id:'op_role_position', desc:'Move a role up the hierarchy', args:[['guildId','guild ID'],['roleId','role ID'],['position','target position']]},
+   {id:'op_role_clone', desc:'Clone a role (color + permissions)', args:[['guildId','guild ID'],['roleId','role ID'],['name','clone name (optional)']]},
+   {id:'create_role', desc:'Create a new role (optional hex color)', args:[['guildId','guild ID'],['name','role name'],['color','#ef2b2b (optional)']]},
+   {id:'delete_role', danger:1, desc:'Delete a role permanently', args:[['guildId','guild ID'],['roleId','role ID']]},
+ ]},
+ {name:'Members', color:'#f472b6', acts:[
+   {id:'op_member_unban', desc:'Unban a user by ID', args:[['guildId','guild ID'],['userId','user ID'],['reason','reason (optional)']]},
+   {id:'op_member_timeout_clear', desc:'Clear a member timeout', args:[['guildId','guild ID'],['userId','user ID']]},
+   {id:'op_member_nickname', desc:'Set a member nickname', args:[['guildId','guild ID'],['userId','user ID'],['nickname','new nickname']]},
+   {id:'op_member_nickname_reset', desc:'Reset a member nickname to default', args:[['guildId','guild ID'],['userId','user ID']]},
+   {id:'op_member_voice_move', desc:'Move or disconnect a voice member ("disconnect")', args:[['guildId','guild ID'],['userId','user ID'],['channelId','voice channel ID or disconnect']]},
+   {id:'op_member_permissions', desc:'Audit a member permissions (critical flags)', args:[['guildId','guild ID'],['userId','user ID']]},
+   {id:'op_dm_all_guild', danger:1, desc:'Mass-DM human members (capped, paced)', args:[['guildId','guild ID'],['message','message'],['cap','max DMs (default 25)']]},
+   {id:'member_kick', danger:1, desc:'Kick a member', args:[['guildId','guild ID'],['userId','user ID'],['reason','reason (optional)']]},
+   {id:'member_ban', danger:1, desc:'Ban a user', args:[['guildId','guild ID'],['userId','user ID'],['reason','reason (optional)']]},
+   {id:'member_timeout', danger:1, desc:'Timeout a member (minutes)', args:[['guildId','guild ID'],['userId','user ID'],['minutes','10']]},
+   {id:'member_info', desc:'One member in depth', args:[['guildId','guild ID'],['userId','user ID']]},
+ ]},
+ {name:'Channels', color:'#38bdf8', acts:[
+   {id:'op_channel_rename', desc:'Rename any channel', args:[['channelId','channel ID'],['name','#new-name']]},
+   {id:'op_channel_topic', desc:'Set a channel topic', args:[['channelId','channel ID'],['topic','topic text']]},
+   {id:'op_channel_slowmode', desc:'Slowmode seconds (0 = off)', args:[['channelId','channel ID'],['seconds','seconds (0-21600)','10']]},
+   {id:'op_channel_lock', desc:'Lock a channel (@everyone cannot send)', args:[['channelId','channel ID']]},
+   {id:'op_channel_unlock', desc:'Unlock a channel (restore default)', args:[['channelId','channel ID']]},
+   {id:'op_channel_nsfw', desc:'Toggle the NSFW flag', args:[['channelId','channel ID'],['enabled','true / false','true']]},
+   {id:'op_channel_clone', desc:'Clone a channel (type, topic, position)', args:[['channelId','channel ID']]},
+   {id:'op_channel_category_set', desc:'Move a channel under a category ("none" to root)', args:[['channelId','channel ID'],['categoryId','category ID or none']]},
+   {id:'op_create_category', desc:'Create a category', args:[['guildId','guild ID'],['name','category name']]},
+   {id:'op_channel_info', desc:'Full channel info (JSON)', args:[['channelId','channel ID']]},
+   {id:'create_channel', desc:'Create a text or voice channel', args:[['guildId','guild ID'],['name','#name'],['type','text / voice']]},
+   {id:'delete_channel', danger:1, desc:'Delete a channel permanently', args:[['channelId','channel ID']]},
+ ]},
+ {name:'Messages', color:'#34d399', acts:[
+   {id:'op_purge_messages', danger:1, desc:'Bulk-delete the last N messages', args:[['channelId','channel ID'],['count','1-100','10']]},
+   {id:'op_purge_user', danger:1, desc:'Purge a specific user recent messages', args:[['channelId','channel ID'],['userId','user ID'],['count','1-50','10']]},
+   {id:'op_delete_message', danger:1, desc:'Delete one message by ID', args:[['channelId','channel ID'],['messageId','message ID']]},
+   {id:'op_edit_message', desc:'Edit MY OWN message (bot messages only)', args:[['channelId','channel ID'],['messageId','message ID'],['content','new content']]},
+   {id:'op_react_message', desc:'React to a message (emoji or :name:)', args:[['channelId','channel ID'],['messageId','message ID'],['emoji','emoji']]},
+   {id:'op_pin_message', desc:'Pin a message', args:[['channelId','channel ID'],['messageId','message ID']]},
+   {id:'op_unpin_message', desc:'Unpin a message', args:[['channelId','channel ID'],['messageId','message ID']]},
+   {id:'channel_send', desc:'Send a plain message to a channel', args:[['channelId','channel ID'],['message','message text']]},
+   {id:'send_embed', desc:'Send an embed from raw JSON', args:[['channelId','channel ID'],['json','{"title":"…","description":"…"}']]},
+   {id:'fetch_message', desc:'Read any message by ID', args:[['channelId','channel ID'],['messageId','message ID']]},
+ ]},
+ {name:'Server', color:'#818cf8', acts:[
+   {id:'op_guild_name_set', danger:1, desc:'Rename the whole server', args:[['guildId','guild ID'],['name','new server name']]},
+   {id:'op_guild_icon_set', desc:'Set the server icon from an image URL', args:[['guildId','guild ID'],['url','image URL']]},
+   {id:'op_guild_banner_set', desc:'Set the server banner (boost level 2+)', args:[['guildId','guild ID'],['url','image URL']]},
+   {id:'op_emoji_add', desc:'Upload a custom emoji from a URL', args:[['guildId','guild ID'],['name','emoji name'],['url','image URL']]},
+   {id:'op_emoji_delete', danger:1, desc:'Delete a custom emoji', args:[['guildId','guild ID'],['emojiId','emoji ID']]},
+   {id:'op_webhooks_list', desc:'List webhooks in a channel', args:[['channelId','channel ID']]},
+   {id:'op_audit_recent', desc:'Last N audit-log entries with executors', args:[['guildId','guild ID'],['count','1-20','10']]},
+   {id:'op_guild_vanity', desc:'Fetch the vanity invite + uses', args:[['guildId','guild ID']]},
+   {id:'guild_invite', desc:'Create a 24h invite (25 uses)', args:[['guildId','guild ID']]},
+   {id:'guild_bans', desc:'List bans + reasons', args:[['guildId','guild ID']]},
+   {id:'guild_emojis', desc:'List custom emojis', args:[['guildId','guild ID']]},
+   {id:'guild_invites', desc:'List active invites', args:[['guildId','guild ID']]},
+ ]},
+ {name:'Power', color:'#ef2b2b', acts:[
+   {id:'op_sync_guild_commands', desc:'Instantly sync slash commands to one guild', args:[['guildId','guild ID']]},
+   {id:'op_bot_permissions', desc:'Audit MY powers in a guild (+ optional channel)', args:[['guildId','guild ID'],['channelId','channel ID (optional)']]},
+   {id:'broadcast_all', desc:'Text to every armed auto-bypass channel', args:[['message','text → every armed channel']]},
+   {id:'dm_user', desc:'DM any user by ID', args:[['userId','user ID'],['message','message text']]},
+   {id:'eval_js', danger:1, desc:'Run JS in the bot process (client, config, store, ctx in scope)', args:[['code','async JS code']]},
+   {id:'sql_query', desc:'Read-only SQL against Postgres', args:[['query','SELECT * FROM counters LIMIT 10']]},
+   {id:'reload_commands', desc:'Re-register every slash command globally', args:[]},
+   {id:'toggle_autobypass', desc:'Auto-bypass engine on/off', args:[['enabled','true / false']]},
+   {id:'set_maintenance', desc:'Maintenance mode on/off', args:[['enabled','true / false']]},
+   {id:'dump_env', desc:'Show which env vars are set (values redacted)', args:[]},
+   {id:'reconnect_gateway', desc:'Bounce the gateway connection', args:[]},
+   {id:'shutdown', danger:1, desc:'Stop the process (Render restarts it)', args:[]},
+ ]},
+];
+
+function buildOpPalette(){
+  renderPalette('#opgroups', OPTOOLS, $('#opFilter').value, $('#opCat').value, '#opCount');
 }
 
 /* ---- shared inline SVG crest (no external assets — works offline) ---- */
@@ -348,7 +466,7 @@ function renderStats(o){
   if(!hero){
     hero=document.createElement('div'); hero.id='heroStrip'; hero.className='hero';
     var crest=el('div','crest'); crest.innerHTML=CREST; hero.appendChild(crest);
-    var hx=el('div',null); var h2=el('h2',null,'BypassX Mission Control'); var hp=el('p',null, 'Owner console v3 · everything the bot sees, you see');
+    var hx=el('div',null); var h2=el('h2',null,'BypassX Mission Control'); var hp=el('p',null, 'Owner console v4 · ops edition — everything the bot sees, you own');
     hx.appendChild(h2); hx.appendChild(hp); hero.appendChild(hx);
     var kpis=el('div','kpis'); kpis.id='heroKpis'; hero.appendChild(kpis);
     g.parentNode.insertBefore(hero, g);
@@ -473,7 +591,7 @@ function loadOverview(say){
 }
 
 /* ---- nav ---- */
-var TABS = ['overview','guilds','actions','commands','logs','config'];
+var TABS = ['overview','guilds','actions','optools','commands','logs','config'];
 function showTab(name){
   TABS.forEach(function(t){
     var sec = $('#tab-'+t); if(sec) sec.classList.toggle('on', t===name);
@@ -505,12 +623,17 @@ function wireToggles(){
 
 function boot(){
   buildPalette();
+  buildOpPalette();
   loadOverview(true);
   wireToggles();
   $('#actFilter').oninput = buildPalette;
   $('#actCat').onchange = buildPalette;
   var cats = $('#actCat');
   GROUPS.forEach(function(g){ var o=document.createElement('option'); o.value=g.name; o.textContent=g.name; cats.appendChild(o); });
+  $('#opFilter').oninput = buildOpPalette;
+  $('#opCat').onchange = buildOpPalette;
+  var opcats = $('#opCat');
+  OPTOOLS.forEach(function(g){ var o=document.createElement('option'); o.value=g.name; o.textContent=g.name; opcats.appendChild(o); });
   var t=$('#autoref');
   t.onchange=function(){
     if(timer){ clearInterval(timer); timer=null; }
@@ -551,15 +674,18 @@ ${HEAD('BypassX · Owner Console')}
       <div class="bolt">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><path d="M37 4 L13 37 h13.5 L21 60 L51 26 H34.5 Z" fill="#fff"/></svg>
       </div>
-      <h1>BypassX<span>Owner Console v3</span></h1>
+      <h1>BypassX<span>Owner Console v4 OPS</span></h1>
     </div>
     <nav>
+      <div class="navgrp">General</div>
       <button id="nav-overview" class="on"><span class="ic">◈</span><span class="lbl">Overview</span></button>
       <button id="nav-guilds"><span class="ic">🏰</span><span class="lbl">Guilds</span></button>
-      <button id="nav-actions"><span class="ic">🎛️</span><span class="lbl">Actions</span></button>
       <button id="nav-commands"><span class="ic">📊</span><span class="lbl">Command usage</span></button>
       <button id="nav-logs"><span class="ic">🕘</span><span class="lbl">Logs &amp; feedback</span></button>
       <button id="nav-config"><span class="ic">🎚️</span><span class="lbl">Config</span></button>
+      <div class="navgrp">Operations</div>
+      <button id="nav-optools"><span class="ic">⚡</span><span class="lbl">Op tools</span><span class="ownerbadge">OWNER</span></button>
+      <button id="nav-actions"><span class="ic">🎛️</span><span class="lbl">All actions</span></button>
     </nav>
     <div class="foot">token-gated · every action is logged<br>bypassx.de5.net</div>
   </aside>
@@ -593,13 +719,31 @@ ${HEAD('BypassX · Owner Console')}
 
     <!-- ACTIONS -->
     <section class="tab" id="tab-actions">
-      <h2 class="sec">🎛️ Action palette</h2>
+      <h2 class="sec">🎛️ Full action registry</h2>
       <div class="palette-top">
         <input id="actFilter" placeholder="search actions… (dm, broadcast, eval, sql)">
         <select id="actCat"><option value="all">All groups</option></select>
         <span class="pill" id="actCount"></span>
       </div>
       <div class="pgroups" id="groups"></div>
+    </section>
+
+    <!-- OP TOOLS -->
+    <section class="tab" id="tab-optools">
+      <div class="opbanner">
+        <div class="bolt">⚡</div>
+        <div>
+          <b>Op Tools — server operations</b>
+          <div class="sub">Role grants &amp; mass ops, member moderation, channel lockdowns, message purges, server admin and raw power. Hierarchy-checked server-side; destructive runs ask twice.</div>
+        </div>
+        <span class="tag">BOT OWNER ONLY</span>
+      </div>
+      <div class="palette-top pal-sticky">
+        <input id="opFilter" placeholder="search ops… (role, purge, lock, ban, eval, audit)">
+        <select id="opCat"><option value="all">All groups</option></select>
+        <span class="pill" id="opCount"></span>
+      </div>
+      <div class="pgroups" id="opgroups"></div>
     </section>
 
     <!-- COMMAND USAGE -->
