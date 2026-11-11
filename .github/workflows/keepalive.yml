@@ -1,0 +1,44 @@
+name: Keep-alive ping
+
+# Render free web services spin down after ~15 minutes without inbound HTTP.
+# The bot self-pings every 5 minutes, but if that process ever dies without
+# a crash-loop (or a Render hiccup drops the pings), nothing wakes it — this
+# workflow is the external safety net: hit /health every 10 minutes.
+# /health answers 200 ONLY when the Discord gateway is actually ready
+# (client.isReady()), and 503 while booting — so a successful ping proves
+# the bot is truly online, not just that the HTTP server is up.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: keepalive-ping
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health (wake + verify gateway)
+        run: |
+          set -uo pipefail
+          URL="https://nexobypass-api.onrender.com/health"
+          code="000"
+          for i in 1 2 3 4; do
+            body=$(curl -s --max-time 90 "$URL" || echo '{}')
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$URL" || echo "000")
+            echo "attempt $i -> HTTP $code $body"
+            if [ "$code" = "200" ] && printf '%s' "$body" | grep -q '"ok":true'; then
+              echo "bot is online (gateway ready)"
+              exit 0
+            fi
+            # 503 = process awake but gateway still booting; give it time
+            sleep 60
+          done
+          echo "::error::Bot unhealthy after 4 attempts (last HTTP $code) — service may be crash-looping or suspended"
+          exit 1
