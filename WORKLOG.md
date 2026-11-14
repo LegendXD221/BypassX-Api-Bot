@@ -762,3 +762,32 @@ surface entirely, and ship v1.2.0.
   service is IMAGE-runtime — GitHub push does NOT deploy it; the flow is
   build_bot_image.sh (crane) → deploy trigger. Also: crane is not preinstalled
   in the sandbox — restored v0.20.3 static binary to scripts/bin/.
+
+## 2026-11-14 (later) — auto-bypass v2.1: failures speak too (9e8e961, deployed digest sha256:ae8cb442…)
+- FAILURE CARDS: a failed auto-bypass no longer answers with a silent ❌ — it
+  still reacts ❌ (instant glance marker) AND posts a short red error card:
+  "Couldn't bypass this link" + the honest ApiError reason in the ```diff```
+  del-block (same look as the manual /bypass failure card) + a what-now line
+  ("post the link again to retry; every attempt runs fresh") + the self-delete
+  notice. errorContainer gained optional `note` + `footerText` params (backward
+  compatible — existing callers unchanged).
+- FAILURE SELF-CLEAN: the failure card AND the user's link message now
+  self-delete 60s after the attempt settles (same scheduleCleanup as success) —
+  the ❌ reaction goes with the deleted message, so failures leave zero trace.
+  Failed URLs stay un-marked in the recent map → re-posting is a fresh retry.
+- NO Try-Again BUTTON ON THE AUTO FAILURE CARD (deliberate): the card
+  self-deletes at 60s and could vanish mid-retry (handleRetry edits the card in
+  place; paced chains run up to 2 min) — a button on a doomed card is a lie.
+  Manual /bypass and the retry button keep their existing flows untouched.
+- COPY SYNC: /autobypass footer, /enable-autobypass announcement + ephemeral
+  how-it-works, guild-create welcome, /changelog all say "failures post a
+  quick error card, everything self-cleans in 60s".
+- TESTS: failure scenario rewritten — ack + card sent, ❌ kept, honest reason
+  rendered, self-delete note present, NO retry button, fake-timer 60s deletion
+  of card + user message; 7 groups green · smoke 16 green · bx-offline 3 ·
+  suites 25 · op-tools 53 · node --check all touched files.
+- DEPLOY: push 9e8e961 → image sha256:ae8cb442… (export-verify PASS, failure
+  card marker grepped in-image) → Render clearCache deploy live → /health
+  ok:true fresh boot, 11 guilds. NOTE: /home/z/botwork symlink (build script's
+  expected SRC path) is recycled with the sandbox — recreate before building:
+  ln -sfn /home/z/my-project/botwork /home/z/botwork
