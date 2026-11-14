@@ -119,7 +119,7 @@ export default {
               title: 'Auto-bypass enabled in this channel',
               body: [
                 'Supported gated links posted here are now bypassed **automatically** — no commands needed.',
-                '**What happens**\n> Post a supported link — the result card lands in seconds\n> Copy your link/key — the result **and the link message** self-delete **60s** later\n> Unsupported links are ignored silently · failures react ❌',
+                '**What happens**\n> Post a supported link — the result card lands in seconds\n> Copy your link/key — the result **and the link message** self-delete **60s** later\n> Unsupported links are ignored silently · failures post a quick error card — cards & link messages always self-clean in 60s',
                 canManageMessages
                   ? null
                   : '-# ⚠️ I am missing **Manage Messages** here — my result cards will still self-delete, but link posts cannot be cleaned up. Grant it for a fully self-cleaning channel.',
@@ -143,7 +143,7 @@ export default {
           title: newly.length ? `Auto-bypass armed in ${newly.length} channel${newly.length === 1 ? '' : 's'}` : 'Auto-bypass already armed',
           body: [
             `**Armed in this server (${armedNow.length})**\n${armedNow.map((c) => `> <#${c}>`).join('\n')}`,
-            '**How it works** — supported gated links posted in these channels are bypassed automatically · the result card **and the link message** self-delete 60s later · unsupported links are ignored silently · one bypass per channel every 8s · failures react ❌.',
+            '**How it works** — supported gated links posted in these channels are bypassed automatically · the result card **and the link message** self-delete 60s later · unsupported links are ignored silently · failures post a quick error card (❌ too) that self-cleans the same way.',
             newly.length ? `-# An announcement was posted in ${newly.length === 1 ? `<#${newly[0].id}>` : `each of the ${newly.length} channels`} so members know.` : null,
             invalid.length ? `**Skipped**\n${invalid.map((i) => `> ${i}`).join('\n')}` : null,
             `-# Disarm anytime with \`/disable-autobypass\` · check status with \`/autobypass\``,

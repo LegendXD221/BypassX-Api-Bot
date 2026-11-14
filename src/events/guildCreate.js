@@ -28,7 +28,7 @@ export async function onGuildCreate(guild) {
             subtitle: 'Bypass gated links straight in Discord — powered by the official BypassX API',
             body: [
               '**Quick start**\n`/bypass url:` — bypass any supported link\n`/services` — browse every supported service\n`/help` — see everything the bot can do',
-              '**Server admins** — turn on auto-bypass with `/enable-autobypass` and every supported link posted in that channel gets bypassed automatically. Results and the link message self-clean 60s later.',
+              '**Server admins** — turn on auto-bypass with `/enable-autobypass` and every supported link posted in that channel gets bypassed automatically. Results, error cards and the link message self-clean 60s later.',
               '-# Tip: `/help` shows everything — auto-bypass keeps results one tap away.',
             ],
           }),

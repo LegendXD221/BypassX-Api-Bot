@@ -6,7 +6,8 @@
  *      card and the user's link message are deleted (fake timers)
  *   2. oauth success (stubbed API) → oauth card carries the self-delete note,
  *      same 60s cleanup
- *   3. failure → ❌ reaction, NOTHING is deleted (no cleanup scheduled)
+ *   3. failure → ❌ reaction + a short error card (honest reason, no retry
+ *      button); card + user message self-delete at 60s
  *   4. /enable-autobypass posts an announcement in each NEWLY armed channel
  *      (silent on re-arm), with a Manage-Messages hint when the permission
  *      is missing; the card footers advertise the self-delete
@@ -166,28 +167,37 @@ test('auto-bypass oauth: handoff card self-deletes at 60s too', async (t) => {
   ok('oauth handoff: card + user message self-delete at 60s');
 });
 
-/* ---------- 3. failure → ❌ only, NOTHING deleted ---------- */
+/* ---------- 3. failure → error card + ❌, everything self-cleans ---------- */
 
-test('auto-bypass failure: ❌ reaction, no cleanup scheduled', async (t) => {
+test('auto-bypass failure: error card speaks, card + user message deleted at 60s', async (t) => {
   ownerApiAnswer = { ok: false, error: 'no route for this url' };
 
   store.autobypassEnable('g1', 'ch-fail', 'admin-1');
   const { msg, state } = makeMessage({ content: 'https://linkvertise.com/1/willfail', channelId: 'ch-fail' });
   const before = sentMessages.length;
 
-  await onMessage(msg); // no fake timers — prove the failure path schedules nothing that removes traces
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  await onMessage(msg);
 
-  assert.equal(sentMessages.length, before + 1, 'only the ack was sent — no result card');
+  assert.equal(sentMessages.length, before + 2, 'ack + failure card sent');
   const ack = sentMessages[before];
   assert.match(String(ack.payload.content), /bypassing your link/, 'ack pinged the author');
   assert.equal(ack.deleted, true, 'ack cleaned up after the failure');
-  assert.deepEqual(state.reactions, ['❌'], 'failure reacts ❌');
-  assert.equal(state.deleted, false, 'user message survives a failed bypass');
+  assert.deepEqual(state.reactions, ['❌'], 'failure still reacts ❌');
+  const failCard = sentMessages[before + 1];
+  const flat = JSON.stringify(failCard.payload);
+  assert.match(flat, /Couldn.t bypass this link/, 'failure card speaks — never silence-only');
+  assert.match(flat, /no route for this url/, 'card carries the honest reason');
+  assert.match(flat, /self-delete in 60s/, 'card announces its own cleanup');
+  assert.doesNotMatch(flat, /Try Again/, 'no retry button — the card self-deletes; re-posting is the retry');
+  assert.equal(state.deleted, false, 'nothing deleted while the card is up');
 
-  await new Promise((r) => setTimeout(r, 50)); // grace beat — nothing else fires
-  assert.equal(state.deleted, false, 'still not deleted');
+  t.mock.timers.tick(60_000);
+  assert.equal(failCard.deleted, true, 'failure card deleted at 60s');
+  assert.equal(state.deleted, true, 'user link message deleted at 60s too');
+  t.mock.timers.reset();
   ownerApiAnswer = null;
-  ok('failure path: ❌ only, messages left alone');
+  ok('failure path: error card + ❌, card + link message self-clean at 60s');
 });
 
 /* ---------- 4. container footers ---------- */

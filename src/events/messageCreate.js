@@ -1,19 +1,19 @@
 import { extractUrls, cooldowns } from '../util.js';
-import { refreshSupported, matchService, bypassUrl, cacheGet, cacheSet } from '../api.js';
-import { V2, resultContainer, oauthContainer } from '../components.js';
+import { ApiError, refreshSupported, matchService, bypassUrl, cacheGet, cacheSet } from '../api.js';
+import { V2, resultContainer, oauthContainer, errorContainer } from '../components.js';
 import { store } from '../db.js';
 import { log } from '../logger.js';
 
-/** How long a successful auto-bypass leaves its traces in the channel. */
+/** How long an auto-bypass attempt (result or failure) stays in the channel. */
 const CLEANUP_DELAY_MS = 60_000;
 
 /**
- * 60s after a successful auto-bypass, both the result card and the user's
- * link message vanish — the channel stays clean without moderator effort.
- * The card announces its own self-delete so users know to copy first.
- * Deleting the user's message needs **Manage Messages**; when the bot lacks
- * it the result card still cleans up and the missing permission is skipped
- * silently.
+ * 60s after an auto-bypass attempt settles — success card OR failure card —
+ * both the card and the user's link message vanish — the channel stays clean
+ * without moderator effort. Cards announce their own self-delete so users
+ * know to copy first. Deleting the user's message needs **Manage Messages**;
+ * when the bot lacks it the bot's cards still clean up and the missing
+ * permission is skipped silently.
  */
 function scheduleCleanup(resultMsg, userMsg) {
   const timer = setTimeout(() => {
@@ -49,9 +49,10 @@ function markRecent(url) {
 /**
  * Auto-bypass: in channels armed by a server admin, any message containing a
  * supported gated link is bypassed automatically. Unknown links are ignored
- * silently; failures react ❌ instead of spamming the channel. Successes are
- * self-cleaning: the result card and the user's link message are deleted
- * 60 seconds after the result lands (see scheduleCleanup).
+ * silently. Both outcomes are self-cleaning: the result card (or the failure
+ * card) AND the user's link message are deleted 60 seconds after the attempt
+ * settles (see scheduleCleanup). Failures react ❌ AND post a short error
+ * card — never silence-only.
  */
 export async function onMessage(message) {
   try {
@@ -125,6 +126,28 @@ export async function onMessage(message) {
         log.warn(`Auto-bypass failed (${target}): ${e.message}`);
         if (ack) ack.delete().catch(() => {});
         message.react('❌').catch(() => {});
+        // Failure speaks too: a short error card instead of a silent ❌. No
+        // Try-Again button — the card self-deletes at 60s and could vanish
+        // mid-retry; posting the link again is the natural retry (the failed
+        // URL was un-marked above, so the next message runs it fresh).
+        const failCard = await message.channel
+          .send({
+            flags: V2,
+            components: [
+              errorContainer({
+                title: 'Couldn’t bypass this link',
+                description:
+                  e instanceof ApiError
+                    ? e.message
+                    : 'Something went wrong while contacting the BypassX API.',
+                note: '**What now** — post the link again to retry; every attempt runs fresh.\n-# This card and the link message self-delete in 60s — the channel stays clean.',
+                footerText: 'auto-bypass',
+              }),
+            ],
+            allowedMentions: { parse: [] },
+          })
+          .catch(() => null);
+        if (failCard) scheduleCleanup(failCard, message);
         return;
       }
     }

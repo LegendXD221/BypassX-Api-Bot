@@ -21,7 +21,7 @@ export default {
             diffStatus({
               title: ['v2.0.0 — the power update'],
               ok: [
-                'auto-bypass v2 — self-cleaning: result card & link message deleted 60s after each bypass, announcement posted in the channel when /enable-autobypass arms it',
+                'auto-bypass v2 — self-cleaning: result card & link message deleted 60s after each bypass (failures too — they now post a quick error card instead of a silent ❌), announcement posted in the channel when /enable-autobypass arms it',
                 'message formats: ```diff``` green/red blocks + ```ansi``` live panels everywhere',
                 'owner dashboard v2 — redesigned console, 55+ actions, live stats',
                 '/bx suite — batch×5, key systems, multi-check, last-rerun, suggest',

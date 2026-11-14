@@ -224,7 +224,14 @@ export function oauthContainer({ siteName, action, note, sourceUrl, userId, auto
 /* Errors                                                              */
 /* ------------------------------------------------------------------ */
 
-export function errorContainer({ title = 'Something went wrong', description, retryUrl = null, retryUserId = null }) {
+export function errorContainer({
+  title = 'Something went wrong',
+  description,
+  retryUrl = null,
+  retryUserId = null,
+  note = null,
+  footerText = null,
+}) {
   const rows = [];
   if (retryUrl) {
     const token = issueToken({ kind: 'retry', url: retryUrl, userId: retryUserId });
@@ -247,8 +254,9 @@ export function errorContainer({ title = 'Something went wrong', description, re
     accent: config.colors.error,
     emoji: '⚠️',
     title,
-    body: [detail],
+    body: [detail, note],
     rows,
+    footerText,
   });
 }
 
