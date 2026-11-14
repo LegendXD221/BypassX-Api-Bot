@@ -25,7 +25,7 @@ export default {
           title: 'Invite BypassX Api',
           body: [
             'Add the bot to your server and bypass gated links with a single command.',
-            'Permissions needed: View Channel, Send Messages, Read Message History, Add Reactions — plus the **Message Content** intent (for auto-bypass).',
+            'Permissions needed: View Channel, Send Messages, Read Message History, Add Reactions — plus the **Message Content** intent (for auto-bypass). **Manage Messages** is optional but recommended: it lets auto-bypass clean up link posts 60s after the result.',
           ],
           rows: [row],
         }),

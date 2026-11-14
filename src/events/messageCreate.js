@@ -4,6 +4,25 @@ import { V2, resultContainer, oauthContainer } from '../components.js';
 import { store } from '../db.js';
 import { log } from '../logger.js';
 
+/** How long a successful auto-bypass leaves its traces in the channel. */
+const CLEANUP_DELAY_MS = 60_000;
+
+/**
+ * 60s after a successful auto-bypass, both the result card and the user's
+ * link message vanish — the channel stays clean without moderator effort.
+ * The card announces its own self-delete so users know to copy first.
+ * Deleting the user's message needs **Manage Messages**; when the bot lacks
+ * it the result card still cleans up and the missing permission is skipped
+ * silently.
+ */
+function scheduleCleanup(resultMsg, userMsg) {
+  const timer = setTimeout(() => {
+    resultMsg?.delete().catch(() => {});
+    userMsg?.delete().catch(() => {});
+  }, CLEANUP_DELAY_MS);
+  timer.unref?.(); // never hold the process open for housekeeping
+}
+
 /** Recently auto-bypassed URLs — a repeat within 10 minutes is skipped. */
 const recent = new Map(); // url -> timestamp
 const RECENT_TTL_MS = 10 * 60_000;
@@ -30,7 +49,9 @@ function markRecent(url) {
 /**
  * Auto-bypass: in channels armed by a server admin, any message containing a
  * supported gated link is bypassed automatically. Unknown links are ignored
- * silently; failures react ❌ instead of spamming the channel.
+ * silently; failures react ❌ instead of spamming the channel. Successes are
+ * self-cleaning: the result card and the user's link message are deleted
+ * 60 seconds after the result lands (see scheduleCleanup).
  */
 export async function onMessage(message) {
   try {
@@ -73,7 +94,7 @@ export async function onMessage(message) {
     if (!cached) {
       ack = await message.channel
         .send({
-          content: `${message.author} bypassing your link…`,
+          content: `⚡ ${message.author} bypassing your link…`,
           allowedMentions: { users: [message.author.id] },
         })
         .catch(() => null);
@@ -123,29 +144,36 @@ export async function onMessage(message) {
       // OAuth handoffs render through the oauth container — the generic
       // resultContainer reads result.url (undefined here) and produced a
       // "Key Generated" card with an empty diff + "undefined" copy buttons.
-      await message.channel.send({
-        flags: V2,
-        components: [
-          oauthContainer({
-            siteName: result.serviceName,
-            action: result.action,
-            note: result.note,
-            sourceUrl: target,
-            userId: message.author.id,
-          }),
-        ],
-        allowedMentions: { parse: [] },
-      });
+      const sent = await message.channel
+        .send({
+          flags: V2,
+          components: [
+            oauthContainer({
+              siteName: result.serviceName,
+              action: result.action,
+              note: result.note,
+              sourceUrl: target,
+              userId: message.author.id,
+              auto: true,
+            }),
+          ],
+          allowedMentions: { parse: [] },
+        })
+        .catch(() => null);
       if (ack) ack.delete().catch(() => {});
+      if (sent) scheduleCleanup(sent, message);
       return;
     }
 
-    await message.channel.send({
-      flags: V2,
-      components: [resultContainer({ sourceUrl: target, result, auto: true })],
-      allowedMentions: { parse: [] },
-    });
+    const sent = await message.channel
+      .send({
+        flags: V2,
+        components: [resultContainer({ sourceUrl: target, result, auto: true })],
+        allowedMentions: { parse: [] },
+      })
+      .catch(() => null);
     if (ack) ack.delete().catch(() => {});
+    if (sent) scheduleCleanup(sent, message);
   } catch (e) {
     log.err('Auto-bypass handler error:', e);
   }

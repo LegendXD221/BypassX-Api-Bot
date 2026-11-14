@@ -32,7 +32,7 @@ export default {
           subtitle: `${channels.length} channel${channels.length === 1 ? '' : 's'} armed · bot-wide ${store.totalAutobypassChannels()} across ${store.autobypassGuildCount()} server${store.autobypassGuildCount() === 1 ? '' : 's'}`,
           body: [
             lines,
-            '-# Supported links posted in armed channels are bypassed automatically · one bypass per channel every 8s · failures react ❌',
+            '-# Supported links posted in armed channels are bypassed automatically · result card & link message self-delete after 60s · one bypass per channel every 8s · failures react ❌',
           ],
         }),
       ],

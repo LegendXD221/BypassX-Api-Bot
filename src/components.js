@@ -165,7 +165,7 @@ export function resultContainer({ sourceUrl, result, auto = false }) {
       t.setContent('-# Open Result button hidden — this link is longer than Discord\u2019s 512-char URL limit. Use the copy buttons; they carry the full link.')
     );
   }
-  c.addTextDisplayComponents((t) => t.setContent(brand(auto ? 'auto-bypass' : null)));
+  c.addTextDisplayComponents((t) => t.setContent(brand(auto ? 'auto-bypass · self-deletes in 60s — copy what you need' : null)));
   return c;
 }
 
@@ -173,7 +173,7 @@ export function resultContainer({ sourceUrl, result, auto = false }) {
 /* OAuth handoff (Delta sign-in pause)                                 */
 /* ------------------------------------------------------------------ */
 
-export function oauthContainer({ siteName, action, note, sourceUrl, userId }) {
+export function oauthContainer({ siteName, action, note, sourceUrl, userId, auto = false }) {
   const ttl = Math.min(Math.max(action.expiresInMs ?? 600_000, 5 * 60_000), 14 * 60_000);
   const token = issueToken(
     { kind: 'oauth', url: sourceUrl, ref: action.ref, userId, authorizeUrl: action.authorizeUrl },
@@ -214,7 +214,9 @@ export function oauthContainer({ siteName, action, note, sourceUrl, userId }) {
       t.setContent(`**Sign-in link** (button hidden — the URL exceeds Discord's 512-char limit; copy it manually)\n${action.authorizeUrl}`)
     );
   }
-  c.addTextDisplayComponents((t) => t.setContent(brand('handoff expires soon — finish it in one go')));
+  c.addTextDisplayComponents((t) =>
+    t.setContent(brand(auto ? 'auto-bypass · card self-deletes in 60s — finish the sign-in now' : 'handoff expires soon — finish it in one go'))
+  );
   return c;
 }
 
