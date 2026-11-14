@@ -727,3 +727,38 @@ surface entirely, and ship v1.2.0.
   sha256:25d28d5c… export-verified before deploy (patch markers grepped
   in-image: unhandledRejection-first, VERBATIM passthrough, scrubConn,
   started.watchdog; layer scoped to /app; sources node --check clean).
+
+## 2026-11-14 — auto-bypass v2: self-cleaning + channel announcement (c5e1e3a + f5729f1, deployed digest sha256:f7907f21…)
+- SELF-CLEANING: a successful auto-bypass now deletes its traces 60s after the
+  result lands — BOTH the result card AND the user's link message
+  (messageCreate.scheduleCleanup, unref'd timer; result first, user msg second).
+  The card announces its own self-delete (result footer: "auto-bypass ·
+  self-deletes in 60s — copy what you need"; oauth card: "card self-deletes in
+  60s — finish the sign-in now") so nobody loses a key they didn't copy.
+- DEGRADED-MODE GRACE: deleting the user's message needs Manage Messages; when
+  the bot lacks it the result card still cleans up and the permission miss is
+  skipped silently (no error spam per message).
+- FAILURE PATH UNTOUCHED (by design): failures still react ❌ and leave the
+  message alone — a failed bypass deletes nothing (user message + reaction stay
+  as the retry affordance). Fake-timer test proves no deletion timer is armed.
+- ENABLE ANNOUNCEMENT: /enable-autobypass now posts a visible V2 announcement
+  card in every NEWLY armed channel ("Auto-bypass enabled in this channel" ·
+  what-happens list incl. the 60s self-delete · armed-by credit, no ping via
+  allowedMentions parse:[]); re-arm stays silent (no duplicate spam); missing
+  Manage Messages adds a hint line naming the permission and the degraded
+  behavior. Admin's private ephemeral confirmation updated with the same copy.
+- CONSISTENT COPY: /autobypass status footer, /invite permission list (Manage
+  Messages now recommended-optional), guild-create welcome all mention the
+  60s self-clean; ⚡ prefix on the "bypassing your link…" ack.
+- TESTS: new scripts/test_autobypass_cleanup.mjs — 7 scenario groups green
+  (fake-timer 60s deletion for destination + oauth paths, failure path leaves
+  everything, footers auto-vs-manual, enable announcement + silent re-arm +
+  Manage-Messages hint); smoke 16/16 · bx-offline 3/3 · suites 25/25 ·
+  op-tools 53/53 · node --check every touched file.
+- DEPLOY: GitHub main (c5e1e3a, f5729f1) → image rebuild (crane append-layer,
+  export-verify PASS: layer scoped to /app, patches grepped in-image,
+  sources parse) → Render clearCache deploy dep-dbs4tfrrjlhs73d60m20 →
+  live; /health ok:true (client.isReady) fresh boot, 11 guilds. NOTE: this
+  service is IMAGE-runtime — GitHub push does NOT deploy it; the flow is
+  build_bot_image.sh (crane) → deploy trigger. Also: crane is not preinstalled
+  in the sandbox — restored v0.20.3 static binary to scripts/bin/.
